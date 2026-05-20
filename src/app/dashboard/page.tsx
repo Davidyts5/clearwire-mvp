@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ShieldAlert, CheckCircle2, Clock, FileText, Loader2 } from "lucide-react";
+import { Plus, ShieldAlert, CheckCircle2, Clock, FileText, Loader2, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 type WireRequest = {
   id: string;
@@ -15,9 +16,25 @@ export default function Dashboard() {
   const [requests, setRequests] = useState<WireRequest[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // In a full production app, you would fetch these from /api/wires on load.
-  // We'll leave it empty initially so you can see your real data populate.
+  // Fetch data on page load
+  useEffect(() => {
+    const fetchWires = async () => {
+      try {
+        const res = await fetch('/api/wires');
+        const json = await res.json();
+        if (json.success) {
+          setRequests(json.data);
+        }
+      } catch (err) {
+        console.error("Failed to load wires");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchWires();
+  }, []);
 
   const handleNewRequest = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -30,7 +47,6 @@ export default function Dashboard() {
     };
     
     try {
-      // 1. Call our real Next.js API route (which hits Supabase & Twilio)
       const res = await fetch('/api/wires', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -40,10 +56,9 @@ export default function Dashboard() {
       const result = await res.json();
 
       if (result.success) {
-        // 2. Add the real database row to our UI
         setRequests([result.data, ...requests]);
         setIsModalOpen(false);
-        alert(`Request logged in Supabase! ${result.warning ? result.warning : 'SMS sent to your phone via Twilio.'}`);
+        alert(`Success! Data saved securely.`);
       } else {
         alert("Error: " + result.error);
       }
@@ -75,7 +90,7 @@ export default function Dashboard() {
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
               <tr>
-                <th className="px-6 py-4">Request ID (UUID)</th>
+                <th className="px-6 py-4">Request ID (Link)</th>
                 <th className="px-6 py-4">Vendor</th>
                 <th className="px-6 py-4">Amount (USD)</th>
                 <th className="px-6 py-4">Status</th>
@@ -83,16 +98,16 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {requests.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                    No requests yet. Click "New Wire Request" to test the database and SMS.
-                  </td>
-                </tr>
+              {isLoading ? (
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">Loading secure wires...</td></tr>
+              ) : requests.length === 0 ? (
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">No requests yet.</td></tr>
               ) : requests.map((req) => (
                 <tr key={req.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-4 font-mono text-slate-500 text-xs">
-                    {req.id.substring(0, 8)}...
+                  <td className="px-6 py-4 font-mono text-xs">
+                    <Link href={`/approve/${req.id}`} className="text-blue-600 hover:text-blue-800 flex items-center gap-1 font-semibold underline">
+                      {req.id.substring(0, 8)}... <ExternalLink size={12} />
+                    </Link>
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name}</td>
                   <td className="px-6 py-4 text-slate-900">${Number(req.amount).toLocaleString()}</td>
@@ -128,7 +143,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="p-6 border-b border-slate-100">
               <h2 className="text-xl font-bold">Initiate Wire Request</h2>
-              <p className="text-sm text-slate-500 mt-1">This will insert data into Supabase and SMS the CFO via Twilio.</p>
+              <p className="text-sm text-slate-500 mt-1">This will insert data into Supabase and notify the CFO.</p>
             </div>
             <form onSubmit={handleNewRequest} className="p-6 space-y-4">
               <div>
@@ -141,12 +156,6 @@ export default function Dashboard() {
                   <span className="absolute left-3 top-2.5 text-slate-500">$</span>
                   <input required name="amount" type="number" min="1" step="0.01" placeholder="50000" className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                 </div>
-              </div>
-              <div className="bg-blue-50 p-4 rounded-lg flex gap-3 border border-blue-100">
-                <ShieldAlert className="text-blue-600 shrink-0" size={20} />
-                <p className="text-xs text-blue-800">
-                  Submitting this will trigger a real API call. It will attempt to send an SMS to the number configured in your .env file.
-                </p>
               </div>
               <div className="flex justify-end gap-3 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900">Cancel</button>
