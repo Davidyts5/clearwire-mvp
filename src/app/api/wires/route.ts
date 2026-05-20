@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       
       // In production, the URL would be https://clearwire.security/approve/...
       // For local testing, we'll just send the ID.
-      const approvalUrl = `http://localhost:3000/approve/${requestData.id}`;
+      const approvalUrl = `https://clearwire-mvp.vercel.app/approve/${requestData.id}`;
 
       await client.messages.create({
         body: `CLEARWIRE URGENT: Wire request for $${amount} to ${vendor}. Tap link to cryptographically approve: ${approvalUrl}`,
