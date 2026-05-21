@@ -1,0 +1,15 @@
+Subject: The $25.6M Arup deepfake breach & [Company Name]'s AP protocols
+
+Hi [First Name],
+
+Last year, Arup lost $25.6M because their AP clerk thought they were on a video call with the CFO authorizing a wire. Deepfake B2B wire fraud attempts are up 1,300% this year, and cyber insurance is increasingly refusing to cover "social engineering" failures.
+
+If an attacker cloned your voice from a LinkedIn video today and called your AP clerk to authorize a $150k urgent wire, what software physically stops the clerk from hitting send?
+
+We built ClearWire. It's a lightweight web app that intercepts wire requests from your AP clerk and sends a cryptographic out-of-band challenge directly to your mobile device using Apple FaceID/Passkeys. It mathematically guarantees you are the one authorizing the wire.
+
+Can I show you a 5-minute demo on Tuesday to show you exactly how it physically stops deepfake fraud?
+
+Best,
+David
+Founder, ClearWire

@@ -1,45 +1,84 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle } from "lucide-react";
-import { startAuthentication } from "@simplewebauthn/browser";
+import Link from "next/link";
 
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
-  const [status, setStatus] = useState<"pending" | "verifying" | "approved" | "error">("pending");
-  
-  // In a real app, this is fetched from the DB based on params.id
-  const wireDetails = {
-    id: params.id || "REQ-002",
-    vendor: "AWS Web Services",
-    amount: 24000.00,
-    requester: "Jane Doe (AP Clerk)",
-    timestamp: new Date().toLocaleString(),
-    antiAiPhrase: "PURPLE ELEPHANT BATTERY"
-  };
+  const [status, setStatus] = useState<"loading" | "pending" | "verifying" | "approved" | "error">("loading");
+  const [wireDetails, setWireDetails] = useState<any>(null);
+
+  // Fetch the real data from Supabase on load
+  useEffect(() => {
+    const fetchWire = async () => {
+      try {
+        const res = await fetch(`/api/wires/${params.id}`);
+        const json = await res.json();
+        if (json.success) {
+          setWireDetails(json.data);
+          setStatus(json.data.status === "approved" ? "approved" : "pending");
+        } else {
+          setStatus("error");
+        }
+      } catch (err) {
+        setStatus("error");
+      }
+    };
+    fetchWire();
+  }, [params.id]);
 
   const handlePasskeyAuth = async () => {
     setStatus("verifying");
     
     try {
-      // Mocking the passkey flow for the MVP demo.
-      // In production, we'd fetch options from our Next.js API, 
-      // pass them to startAuthentication, and verify the response.
-      
-      /*
-      const resp = await fetch('/api/generate-authentication-options');
-      const options = await resp.json();
-      const authResult = await startAuthentication(options);
-      await fetch('/api/verify-authentication', { method: 'POST', body: JSON.stringify(authResult) });
-      */
+      // 1. Trigger the REAL Biometric hardware on the phone (FaceID / Fingerprint)
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+      const userId = new Uint8Array(16);
+      window.crypto.getRandomValues(userId);
 
-      // Simulate network / cryptographic delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setStatus("approved");
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: { name: "ClearWire Security", id: window.location.hostname },
+          user: { id: userId, name: "cfo@clearwire", displayName: "Chief Financial Officer" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+          authenticatorSelection: { userVerification: "required" },
+          timeout: 60000,
+          attestation: "none"
+        }
+      });
+
+      if (!credential) throw new Error("Biometric auth failed");
+
+      // 2. Send the biometric success to the Next.js API to approve the database row
+      const res = await fetch(`/api/wires/${params.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentialId: credential.id })
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setWireDetails(json.data); // Update with the new hash
+        setStatus("approved");
+      } else {
+        throw new Error("Server rejected approval");
+      }
     } catch (err) {
       console.error(err);
-      setStatus("error");
+      alert("Biometric verification canceled or failed.");
+      setStatus("pending");
     }
   };
+
+  if (status === "loading") {
+    return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
+  }
+
+  if (status === "error" || !wireDetails) {
+    return <div className="text-center mt-20 text-red-500 font-medium">Invalid or Expired Wire Request.</div>;
+  }
 
   if (status === "approved") {
     return (
@@ -49,15 +88,14 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         </div>
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Cryptographically Signed</h2>
         <p className="text-slate-500 mb-6">
-          The wire to {wireDetails.vendor} has been securely authorized. A PDF certificate has been sent to the AP dashboard.
+          The wire to <span className="font-semibold text-slate-900">{wireDetails.vendor_name}</span> has been securely authorized. A PDF certificate has been sent to the AP dashboard.
         </p>
-        <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs text-slate-500 break-all text-left border border-slate-200">
-          HASH: 0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs text-slate-500 break-all text-left border border-slate-200 mb-6">
+          HASH: {wireDetails.cryptographic_hash}
           <br/>
-          DEVICE: Apple iPhone (FaceID)
-          <br/>
-          TIME: {new Date().toISOString()}
+          TIME: {new Date(wireDetails.approved_at).toLocaleString()}
         </div>
+        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
       </div>
     );
   }
@@ -77,19 +115,15 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         <div className="space-y-3">
           <div className="flex justify-between items-end border-b border-slate-100 pb-3">
             <span className="text-sm text-slate-500">Pay To</span>
-            <span className="font-semibold text-slate-900 text-right">{wireDetails.vendor}</span>
+            <span className="font-semibold text-slate-900 text-right">{wireDetails.vendor_name}</span>
           </div>
           <div className="flex justify-between items-end border-b border-slate-100 pb-3">
             <span className="text-sm text-slate-500">Amount</span>
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">${wireDetails.amount.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-end border-b border-slate-100 pb-3">
-            <span className="text-sm text-slate-500">Requested By</span>
-            <span className="font-medium text-slate-700">{wireDetails.requester}</span>
+            <span className="text-2xl font-bold text-slate-900 tracking-tight">${Number(wireDetails.amount).toLocaleString()}</span>
           </div>
         </div>
 
-        {wireDetails.amount > 20000 && (
+        {Number(wireDetails.amount) > 10000 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
@@ -99,7 +133,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
                   High-value wires require vocal confirmation. Read this phrase aloud if on a video call:
                 </p>
                 <div className="bg-white px-3 py-2 rounded border border-amber-200 font-mono text-center font-bold text-slate-800 tracking-wider">
-                  {wireDetails.antiAiPhrase}
+                  {wireDetails.anti_ai_phrase}
                 </div>
               </div>
             </div>
@@ -117,9 +151,9 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
             <>
               <div className="flex items-center gap-2 font-semibold text-lg">
                 <Fingerprint size={20} />
-                Sign with Passkey (FaceID/TouchID)
+                Sign with Passkey
               </div>
-              <span className="text-xs text-blue-200 font-medium">Cryptographically secure signature</span>
+              <span className="text-xs text-blue-200 font-medium">Hardware cryptographic signature</span>
             </>
           )}
         </button>
