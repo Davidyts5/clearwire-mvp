@@ -24,7 +24,9 @@ export default function Login() {
       if (error) throw error;
 
       if (data.session) {
-        // Fetch user role to determine where to route them
+        // Manually set the cookie so our lightweight middleware can read it instantly
+        document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=3600; SameSite=Lax; Secure`;
+
         const { data: userData } = await supabase
           .from('users')
           .select('role')
