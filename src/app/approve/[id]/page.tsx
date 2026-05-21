@@ -3,27 +3,56 @@
 import { useState, useEffect } from "react";
 import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
-  const [status, setStatus] = useState<"loading" | "pending" | "verifying" | "approved" | "denied" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "pending" | "verifying" | "approved" | "denied" | "error" | "unauthorized">("loading");
   const [wireDetails, setWireDetails] = useState<any>(null);
 
   useEffect(() => {
-    const fetchWire = async () => {
+    const fetchWireAndVerifyRole = async () => {
       try {
+        // 1. Fetch the wire details from the API
         const res = await fetch(`/api/wires/${params.id}`);
         const json = await res.json();
-        if (json.success) {
-          setWireDetails(json.data);
-          setStatus(json.data.status); // Will be 'pending', 'approved', or 'denied'
-        } else {
+        
+        if (!json.success) {
           setStatus("error");
+          return;
         }
+        
+        setWireDetails(json.data);
+
+        // 2. Check the logged-in user's role natively via Supabase client
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          // If they aren't logged in at all, they can't approve.
+          setStatus("unauthorized");
+          return;
+        }
+
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+
+        // 3. ENFORCE ROLE-BASED ACCESS CONTROL (RBAC)
+        if (userData?.role !== 'cfo') {
+          setStatus("unauthorized");
+          return;
+        }
+
+        // If they are a CFO, show the normal status
+        setStatus(json.data.status);
+        
       } catch (err) {
         setStatus("error");
       }
     };
-    fetchWire();
+    
+    fetchWireAndVerifyRole();
   }, [params.id]);
 
   const handleDecline = async () => {
@@ -87,6 +116,22 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
   if (status === "loading") return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
   if (status === "error" || !wireDetails) return <div className="text-center mt-20 text-red-500 font-medium">Invalid or Expired Wire Request.</div>;
+
+  // NEW SECURITY BLOCK: Prevents AP Clerks from viewing the approval buttons
+  if (status === "unauthorized") {
+    return (
+      <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <ShieldCheck size={32} />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
+        <p className="text-slate-500 mb-6">
+          Your account role does not have authorization to cryptographically sign wire transfers. This action requires Executive (CFO) privileges.
+        </p>
+        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
+      </div>
+    );
+  }
 
   if (status === "denied") {
     return (
