@@ -11,6 +11,7 @@
   "dependencies": {
     "@simplewebauthn/browser": "^9.0.1",
     "@simplewebauthn/server": "^13.3.0",
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/supabase-js": "^2.106.1",
     "autoprefixer": "^10.5.0",
     "lucide-react": "^0.378.0",
