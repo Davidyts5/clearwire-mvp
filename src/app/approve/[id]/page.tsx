@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle } from "lucide-react";
+import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
 
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
-  const [status, setStatus] = useState<"loading" | "pending" | "verifying" | "approved" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "pending" | "verifying" | "approved" | "denied" | "error">("loading");
   const [wireDetails, setWireDetails] = useState<any>(null);
 
-  // Fetch the real data from Supabase on load
   useEffect(() => {
     const fetchWire = async () => {
       try {
@@ -16,7 +15,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         const json = await res.json();
         if (json.success) {
           setWireDetails(json.data);
-          setStatus(json.data.status === "approved" ? "approved" : "pending");
+          setStatus(json.data.status); // Will be 'pending', 'approved', or 'denied'
         } else {
           setStatus("error");
         }
@@ -27,11 +26,26 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
     fetchWire();
   }, [params.id]);
 
+  const handleDecline = async () => {
+    if(!confirm("Are you sure you want to flag this wire as fraudulent and decline it?")) return;
+    setStatus("loading");
+    try {
+      const res = await fetch(`/api/wires/${params.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decline' })
+      });
+      const json = await res.json();
+      if (json.success) setStatus("denied");
+    } catch (err) {
+      alert("Failed to decline.");
+      setStatus("pending");
+    }
+  };
+
   const handlePasskeyAuth = async () => {
     setStatus("verifying");
-    
     try {
-      // 1. Trigger the REAL Biometric hardware on the phone (FaceID / Fingerprint)
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
       const userId = new Uint8Array(16);
@@ -51,16 +65,15 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
       if (!credential) throw new Error("Biometric auth failed");
 
-      // 2. Send the biometric success to the Next.js API to approve the database row
       const res = await fetch(`/api/wires/${params.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credentialId: credential.id })
+        body: JSON.stringify({ action: 'approve', credentialId: credential.id })
       });
 
       const json = await res.json();
       if (json.success) {
-        setWireDetails(json.data); // Update with the new hash
+        setWireDetails(json.data); 
         setStatus("approved");
       } else {
         throw new Error("Server rejected approval");
@@ -72,12 +85,22 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
     }
   };
 
-  if (status === "loading") {
-    return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
-  }
+  if (status === "loading") return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
+  if (status === "error" || !wireDetails) return <div className="text-center mt-20 text-red-500 font-medium">Invalid or Expired Wire Request.</div>;
 
-  if (status === "error" || !wireDetails) {
-    return <div className="text-center mt-20 text-red-500 font-medium">Invalid or Expired Wire Request.</div>;
+  if (status === "denied") {
+    return (
+      <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <XCircle size={32} />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Transfer Declined</h2>
+        <p className="text-slate-500 mb-6">
+          You have flagged this wire to {wireDetails.vendor_name} as unauthorized. The AP Clerk has been notified.
+        </p>
+        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
+      </div>
+    );
   }
 
   if (status === "approved") {
@@ -88,12 +111,11 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         </div>
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Cryptographically Signed</h2>
         <p className="text-slate-500 mb-6">
-          The wire to <span className="font-semibold text-slate-900">{wireDetails.vendor_name}</span> has been securely authorized. A PDF certificate has been sent to the AP dashboard.
+          The wire to <span className="font-semibold text-slate-900">{wireDetails.vendor_name}</span> has been securely authorized.
         </p>
         <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs text-slate-500 break-all text-left border border-slate-200 mb-6">
           HASH: {wireDetails.cryptographic_hash}
-          <br/>
-          TIME: {new Date(wireDetails.approved_at).toLocaleString()}
+          <br/>TIME: {new Date(wireDetails.approved_at).toLocaleString()}
         </div>
         <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
       </div>
@@ -140,23 +162,33 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        <button 
-          onClick={handlePasskeyAuth}
-          disabled={status === "verifying"}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl py-4 flex flex-col items-center justify-center gap-1 transition-all shadow-md shadow-blue-600/20"
-        >
-          {status === "verifying" ? (
-            <span className="animate-pulse font-semibold text-lg">Verifying Biometrics...</span>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 font-semibold text-lg">
-                <Fingerprint size={20} />
-                Sign with Passkey
-              </div>
-              <span className="text-xs text-blue-200 font-medium">Hardware cryptographic signature</span>
-            </>
-          )}
-        </button>
+        <div className="space-y-3">
+          <button 
+            onClick={handlePasskeyAuth}
+            disabled={status === "verifying"}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl py-4 flex flex-col items-center justify-center gap-1 transition-all shadow-md shadow-blue-600/20"
+          >
+            {status === "verifying" ? (
+              <span className="animate-pulse font-semibold text-lg">Verifying Biometrics...</span>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 font-semibold text-lg">
+                  <Fingerprint size={20} />
+                  Sign with Passkey
+                </div>
+                <span className="text-xs text-blue-200 font-medium">Hardware cryptographic signature</span>
+              </>
+            )}
+          </button>
+
+          <button 
+            onClick={handleDecline}
+            className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-xl py-3 flex items-center justify-center gap-2 transition-all border border-red-200"
+          >
+            <XCircle size={18} />
+            Decline & Flag as Fraud
+          </button>
+        </div>
       </div>
     </div>
   );
