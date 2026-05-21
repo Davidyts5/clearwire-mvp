@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
   const [status, setStatus] = useState<"loading" | "pending" | "verifying" | "approved" | "denied" | "error" | "unauthorized">("loading");
@@ -12,8 +11,9 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   useEffect(() => {
     const fetchWireAndVerifyRole = async () => {
       try {
-        // 1. Fetch the wire details from the API
-        const res = await fetch(`/api/wires/${params.id}`);
+        // Adding a timestamp cache-buster so Next.js doesn't reuse the Clerk's version of the page
+        const cacheBuster = new Date().getTime();
+        const res = await fetch(`/api/wires/${params.id}?t=${cacheBuster}`);
         const json = await res.json();
         
         if (!json.success) {
@@ -23,30 +23,13 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         
         setWireDetails(json.data);
 
-        // 2. Check the logged-in user's role natively via Supabase client
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          // If they aren't logged in at all, they can't approve.
+        // Strict client-side check of the backend's ruling
+        if (!json.isCFO) {
           setStatus("unauthorized");
           return;
         }
 
-        const { data: userData } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        // 3. ENFORCE ROLE-BASED ACCESS CONTROL (RBAC)
-        if (userData?.role !== 'cfo') {
-          setStatus("unauthorized");
-          return;
-        }
-
-        // If they are a CFO, show the normal status
         setStatus(json.data.status);
-        
       } catch (err) {
         setStatus("error");
       }
@@ -64,6 +47,13 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'decline' })
       });
+      
+      if(res.status === 403) {
+        alert("Server Rejected: Unauthorized role.");
+        setStatus("unauthorized");
+        return;
+      }
+
       const json = await res.json();
       if (json.success) setStatus("denied");
     } catch (err) {
@@ -100,6 +90,12 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         body: JSON.stringify({ action: 'approve', credentialId: credential.id })
       });
 
+      if(res.status === 403) {
+        alert("Server Rejected: Unauthorized role.");
+        setStatus("unauthorized");
+        return;
+      }
+
       const json = await res.json();
       if (json.success) {
         setWireDetails(json.data); 
@@ -117,7 +113,6 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   if (status === "loading") return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
   if (status === "error" || !wireDetails) return <div className="text-center mt-20 text-red-500 font-medium">Invalid or Expired Wire Request.</div>;
 
-  // NEW SECURITY BLOCK: Prevents AP Clerks from viewing the approval buttons
   if (status === "unauthorized") {
     return (
       <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
