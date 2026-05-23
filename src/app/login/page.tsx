@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ShieldCheck, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase"; // Correct client-side import for SSR
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -16,6 +16,8 @@ export default function Login() {
     setError("");
 
     try {
+      const supabase = createClient();
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -24,9 +26,8 @@ export default function Login() {
       if (error) throw error;
 
       if (data.session) {
-        // Manually set the cookie so our lightweight middleware can read it instantly
-        document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=3600; SameSite=Lax; Secure`;
-
+        // Because we upgraded to @supabase/ssr, the client automatically handles the cookies via Next.js router.
+        // We just need to route them based on their role in the public.users table.
         const { data: userData } = await supabase
           .from('users')
           .select('role')
