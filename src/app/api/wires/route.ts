@@ -1,114 +1,95 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { z } from 'zod';
 import twilio from 'twilio';
+import { evaluateWireRisk } from '@/lib/risk-engine';
+import { withAuth } from '@/lib/api-auth';
 
-export async function GET(req: Request) {
-  try {
-    const authHeader = req.headers.get('cookie') || '';
-    const tokenMatch = authHeader.match(/(?:sb-access-token|supabase-auth-token)=([^;]+)/);
-    
-    if (!tokenMatch) return NextResponse.json({ error: 'Unauthorized: No token' }, { status: 401 });
+const WireSchema = z.object({
+  vendor: z.string().min(2),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  purpose: z.string().min(5),
+  destination_country: z.string().length(2).optional(),
+  bank_account_last_four: z.string().length(4).optional()
+});
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(tokenMatch[1]);
-    if (userError || !user) return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (req, ctx, auth) => {
+  const { data, error } = await auth.supabase
+    .from('wire_requests')
+    .select('*')
+    .eq('company_id', auth.companyId) // Defense in depth
+    .order('created_at', { ascending: false });
 
-    // Look for the user. If they aren't linked to a company, fallback to a null company bypass for MVP demo purposes.
-    const { data: userData } = await supabase.from('users').select('company_id').eq('id', user.id).single();
-    
-    let query = supabase.from('wire_requests').select('*').order('created_at', { ascending: false });
-    
-    if (userData?.company_id) {
-      query = query.eq('company_id', userData.company_id);
-    }
+  if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 });
+  return NextResponse.json({ success: true, data });
+});
 
-    const { data, error } = await query;
+export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => {
+  const body = await req.json();
+  const parsed = WireSchema.parse(body);
 
-    if (error) return NextResponse.json({ error: 'Failed to fetch wires' }, { status: 500 });
-    return NextResponse.json({ success: true, data: data || [] });
-  } catch (error) {
-    return NextResponse.json({ error: 'Server error on GET' }, { status: 500 });
+  const { data: vendorData } = await auth.supabase
+    .from('vendors')
+    .select('id, account_last_four')
+    .eq('name', parsed.vendor)
+    .eq('company_id', auth.companyId)
+    .single();
+
+  let finalVendorId = vendorData?.id;
+
+  if (!vendorData) {
+    const { data: newVendor } = await auth.supabase.from('vendors').insert([{ 
+      company_id: auth.companyId, 
+      name: parsed.vendor,
+      account_last_four: parsed.bank_account_last_four 
+    }]).select().single();
+    finalVendorId = newVendor?.id;
   }
-}
 
-export async function POST(req: Request) {
-  try {
-    const authHeader = req.headers.get('cookie') || '';
-    const tokenMatch = authHeader.match(/(?:sb-access-token|supabase-auth-token)=([^;]+)/);
-    
-    if (!tokenMatch) return NextResponse.json({ error: 'Unauthorized: No Token' }, { status: 401 });
+  const riskAnalysis = await evaluateWireRisk(auth.supabase, {
+    company_id: auth.companyId,
+    vendor_id: finalVendorId,
+    vendor_name: parsed.vendor,
+    amount: parseFloat(parsed.amount),
+    purpose: parsed.purpose,
+    destination_country: parsed.destination_country,
+    bank_account_last_four: parsed.bank_account_last_four
+  });
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(tokenMatch[1]);
-    if (authError || !user) return NextResponse.json({ error: 'Unauthorized: Auth failed' }, { status: 401 });
+  const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
+    company_id: auth.companyId,
+    vendor_id: finalVendorId,
+    vendor_name_snapshot: parsed.vendor,
+    amount: parseFloat(parsed.amount),
+    purpose: parsed.purpose,
+    risk_score: riskAnalysis.totalScore,
+    risk_reasons: riskAnalysis.reasons,
+    clerk_id: auth.userId,
+    status: riskAnalysis.recommendedStatus
+  }]).select().single();
 
-    // Try to find the company ID
-    const { data: userData } = await supabase.from('users').select('company_id').eq('id', user.id).single();
-    
-    // If the database is misaligned and they have no company ID, we will automatically create one and link them 
-    // so the MVP stops crashing.
-    let finalCompanyId = userData?.company_id;
+  if (dbError) throw dbError;
 
-    if (!finalCompanyId) {
-      // Create a fallback company on the fly
-      const { data: newComp } = await supabase.from('companies').insert([{ name: 'Auto-Generated Demo Corp' }]).select().single();
-      finalCompanyId = newComp?.id;
+  await auth.supabase.from('audit_logs').insert([{
+    company_id: auth.companyId,
+    wire_id: requestData.id,
+    actor_id: auth.userId,
+    action: 'CREATED',
+    new_hash: 'INITIAL_STATE'
+  }]);
 
-      // Try to link the user to it
-      if (finalCompanyId) {
-        await supabase.from('users').insert([{
-          id: user.id,
-          company_id: finalCompanyId,
-          email: user.email,
-          full_name: 'Auto Gen Clerk',
-          role: 'clerk'
-        }]);
-      }
-    }
-
-    const body = await req.json();
-    const { vendor, amount, purpose } = body;
-
-    const phrases = ["PURPLE ELEPHANT BATTERY", "RED SUNSET OCEAN", "BLUE MOUNTAIN CABIN", "YELLOW TIGER STRIPE", "SILVER COFFEE MUG"];
-    const antiAiPhrase = phrases[Math.floor(Math.random() * phrases.length)];
-
-    const { data: requestData, error: dbError } = await supabase
-      .from('wire_requests')
-      .insert([{ 
-        company_id: finalCompanyId, // Uses the found or auto-generated ID
-        vendor_name: vendor, 
-        amount: parseFloat(amount), 
-        purpose: purpose || "Invoice Payment", 
-        anti_ai_phrase: antiAiPhrase, 
-        status: 'pending' 
-      }])
-      .select().single();
-
-    if (dbError) {
-      console.error("Insert Error:", dbError);
-      return NextResponse.json({ error: 'Database rejected the insert. Check RLS policies.' }, { status: 500 });
-    }
-
+  if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
     try {
-      if(process.env.TWILIO_SID && process.env.TWILIO_AUTH_TOKEN) {
-        const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
-        const toPhone = process.env.CFO_PHONE_NUMBER; 
-        const fromPhone = process.env.TWILIO_PHONE_NUMBER;
-        const host = req.headers.get('host') || 'localhost:3000';
-        const protocol = host.includes('localhost') ? 'http' : 'https';
-        const approvalUrl = `${protocol}://${host}/approve/${requestData.id}`;
-
-        await client.messages.create({
-          body: `CLEARWIRE URGENT: Wire request for $${amount} to ${vendor}. Purpose: ${purpose}. Tap link to cryptographically approve: ${approvalUrl}`,
-          from: fromPhone,
-          to: toPhone!
-        });
-      }
-    } catch (twilioError) {
-      return NextResponse.json({ success: true, data: requestData, warning: 'DB saved, but SMS failed.' });
+      const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+      const host = req.headers.get('host') || 'localhost:3000';
+      await client.messages.create({
+        body: `CLEARWIRE [Risk: ${riskAnalysis.totalScore}]: Wire request $${parsed.amount} to ${parsed.vendor}. Tap to sign: https://${host}/approve/${requestData.id}`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: process.env.CFO_PHONE_NUMBER!
+      });
+    } catch (e) {
+      console.error("Twilio warning:", e);
     }
-
-    return NextResponse.json({ success: true, data: requestData });
-  } catch (error) {
-    console.error("POST Catch Block Error:", error);
-    return NextResponse.json({ error: 'Failed to process request at edge' }, { status: 500 });
   }
-}
+
+  return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });
+});

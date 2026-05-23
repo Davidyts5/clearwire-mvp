@@ -1,144 +1,90 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { startAuthentication } from "@simplewebauthn/browser";
 
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
-  const [status, setStatus] = useState<"loading" | "pending" | "verifying" | "approved" | "denied" | "error" | "unauthorized">("loading");
+  const [status, setStatus] = useState<string>("loading");
   const [wireDetails, setWireDetails] = useState<any>(null);
 
   useEffect(() => {
-    const fetchWireAndVerifyRole = async () => {
+    const fetchWire = async () => {
       try {
-        // Adding a timestamp cache-buster so Next.js doesn't reuse the Clerk's version of the page
         const cacheBuster = new Date().getTime();
-        const res = await fetch(`/api/wires/${params.id}?t=${cacheBuster}`);
+        const res = await fetch(`/api/wires/${params.id}?t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         
-        if (!json.success) {
-          setStatus("error");
-          return;
-        }
-        
+        if (!json.success) return setStatus("error");
         setWireDetails(json.data);
-
-        // Strict client-side check of the backend's ruling
-        if (!json.isCFO) {
-          setStatus("unauthorized");
-          return;
-        }
+        if (!json.isCFO) return setStatus("unauthorized");
 
         setStatus(json.data.status);
       } catch (err) {
         setStatus("error");
       }
     };
-    
-    fetchWireAndVerifyRole();
+    fetchWire();
   }, [params.id]);
 
-  const handleDecline = async () => {
-    if(!confirm("Are you sure you want to flag this wire as fraudulent and decline it?")) return;
+  const handleAction = async (action: 'decline' | 'review') => {
+    if (action === 'decline' && !confirm("Are you sure you want to decline this wire?")) return;
     setStatus("loading");
     try {
       const res = await fetch(`/api/wires/${params.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'decline' })
+        body: JSON.stringify({ action })
       });
-      
-      if(res.status === 403) {
-        alert("Server Rejected: Unauthorized role.");
-        setStatus("unauthorized");
-        return;
-      }
-
       const json = await res.json();
-      if (json.success) setStatus("denied");
-    } catch (err) {
-      alert("Failed to decline.");
-      setStatus("pending");
+      if (res.status === 400 || res.status === 403) throw new Error(json.error);
+      if (json.success) setStatus(json.data.status);
+    } catch (err: any) {
+      alert(err.message || "Failed to update state.");
+      setStatus(wireDetails?.status || "error");
     }
   };
 
   const handlePasskeyAuth = async () => {
     setStatus("verifying");
     try {
-      const challenge = new Uint8Array(32);
-      window.crypto.getRandomValues(challenge);
-      const userId = new Uint8Array(16);
-      window.crypto.getRandomValues(userId);
+      const resOptions = await fetch(`/api/wires/${params.id}/approve/generate`, { method: 'POST' });
+      const options = await resOptions.json();
+      if (options.error) throw new Error(options.error);
 
-      const credential = await navigator.credentials.create({
-        publicKey: {
-          challenge: challenge,
-          rp: { name: "ClearWire Security", id: window.location.hostname },
-          user: { id: userId, name: "cfo@clearwire", displayName: "Chief Financial Officer" },
-          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
-          authenticatorSelection: { userVerification: "required" },
-          timeout: 60000,
-          attestation: "none"
-        }
-      });
+      const authResp = await startAuthentication(options);
 
-      if (!credential) throw new Error("Biometric auth failed");
-
-      const res = await fetch(`/api/wires/${params.id}`, {
+      const resVerify = await fetch(`/api/wires/${params.id}/approve/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve', credentialId: credential.id })
+        body: JSON.stringify(authResp)
       });
 
-      if(res.status === 403) {
-        alert("Server Rejected: Unauthorized role.");
-        setStatus("unauthorized");
-        return;
-      }
-
-      const json = await res.json();
-      if (json.success) {
-        setWireDetails(json.data); 
+      const verification = await resVerify.json();
+      if (verification.success) {
+        setWireDetails(verification.data);
         setStatus("approved");
       } else {
-        throw new Error("Server rejected approval");
+        throw new Error(verification.error || "Server rejected approval");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Biometric verification canceled or failed.");
-      setStatus("pending");
+      alert(err.message || "Biometric verification failed.");
+      setStatus(wireDetails?.status || "error");
     }
   };
 
   if (status === "loading") return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
-  if (status === "error" || !wireDetails) return <div className="text-center mt-20 text-red-500 font-medium">Invalid or Expired Wire Request.</div>;
-
-  if (status === "unauthorized") {
-    return (
-      <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
-        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <ShieldCheck size={32} />
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
-        <p className="text-slate-500 mb-6">
-          Your account role does not have authorization to cryptographically sign wire transfers. This action requires Executive (CFO) privileges.
-        </p>
-        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
-      </div>
-    );
-  }
+  if (status === "error" || !wireDetails) return <div className="text-center mt-20 text-red-500 font-medium">Invalid Wire Request.</div>;
+  if (status === "unauthorized") return <div className="text-center mt-20 text-red-500 font-medium">Access Denied. CFO Privileges Required.</div>;
 
   if (status === "denied") {
     return (
       <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
-        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <XCircle size={32} />
-        </div>
+        <XCircle size={32} className="mx-auto text-red-600 mb-4" />
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Transfer Declined</h2>
-        <p className="text-slate-500 mb-6">
-          You have flagged this wire to {wireDetails.vendor_name} as unauthorized. The AP Clerk has been notified.
-        </p>
-        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
+        <Link href="/cfo-portal" className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
       </div>
     );
   }
@@ -146,18 +92,12 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   if (status === "approved") {
     return (
       <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-emerald-200 text-center">
-        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <CheckCircle size={32} />
-        </div>
+        <CheckCircle size={32} className="mx-auto text-emerald-600 mb-4" />
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Cryptographically Signed</h2>
-        <p className="text-slate-500 mb-6">
-          The wire to <span className="font-semibold text-slate-900">{wireDetails.vendor_name}</span> has been securely authorized.
-        </p>
-        <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs text-slate-500 break-all text-left border border-slate-200 mb-6">
+        <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs text-slate-500 break-all text-left mb-6">
           HASH: {wireDetails.cryptographic_hash}
-          <br/>TIME: {new Date(wireDetails.approved_at).toLocaleString()}
         </div>
-        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
+        <Link href="/cfo-portal" className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
       </div>
     );
   }
@@ -165,68 +105,49 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   return (
     <div className="max-w-md mx-auto mt-6 bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
       <div className="bg-slate-900 text-white p-6 text-center relative">
-        <div className="absolute top-4 right-4 flex items-center gap-1 text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full">
-          <Lock size={12} /> E2E Encrypted
-        </div>
         <ShieldCheck size={48} className="mx-auto text-blue-400 mb-3" />
         <h1 className="text-xl font-bold tracking-tight">Authorization Required</h1>
-        <p className="text-slate-300 text-sm mt-1">Out-of-band wire verification</p>
       </div>
 
       <div className="p-6 space-y-6">
         <div className="space-y-3">
           <div className="flex justify-between items-end border-b border-slate-100 pb-3">
             <span className="text-sm text-slate-500">Pay To</span>
-            <span className="font-semibold text-slate-900 text-right">{wireDetails.vendor_name}</span>
+            <span className="font-semibold text-slate-900">{wireDetails.vendor_name_snapshot}</span>
           </div>
           <div className="flex justify-between items-end border-b border-slate-100 pb-3">
             <span className="text-sm text-slate-500">Amount</span>
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">${Number(wireDetails.amount).toLocaleString()}</span>
+            <span className="text-2xl font-bold text-slate-900">${Number(wireDetails.amount).toLocaleString()}</span>
           </div>
         </div>
 
-        {Number(wireDetails.amount) > 10000 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-              <div>
-                <h4 className="text-sm font-semibold text-amber-900">Anti-Deepfake Liveness Check</h4>
-                <p className="text-xs text-amber-700 mt-1 mb-2">
-                  High-value wires require vocal confirmation. Read this phrase aloud if on a video call:
-                </p>
-                <div className="bg-white px-3 py-2 rounded border border-amber-200 font-mono text-center font-bold text-slate-800 tracking-wider">
-                  {wireDetails.anti_ai_phrase}
-                </div>
-              </div>
-            </div>
+        {wireDetails.risk_score >= 90 && status === 'frozen' && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
+            <AlertTriangle className="inline mr-2" size={16} />
+            <strong>Risk Engine Freeze.</strong> Score: {wireDetails.risk_score}/100. Must be placed under review before approval.
+          </div>
+        )}
+
+        {status === 'under_review' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+            <strong>Under Manual Review.</strong> This transaction is cleared for authorization.
           </div>
         )}
 
         <div className="space-y-3">
-          <button 
-            onClick={handlePasskeyAuth}
-            disabled={status === "verifying"}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl py-4 flex flex-col items-center justify-center gap-1 transition-all shadow-md shadow-blue-600/20"
-          >
-            {status === "verifying" ? (
-              <span className="animate-pulse font-semibold text-lg">Verifying Biometrics...</span>
-            ) : (
-              <>
-                <div className="flex items-center gap-2 font-semibold text-lg">
-                  <Fingerprint size={20} />
-                  Sign with Passkey
-                </div>
-                <span className="text-xs text-blue-200 font-medium">Hardware cryptographic signature</span>
-              </>
-            )}
-          </button>
+          {status === 'frozen' ? (
+            <button onClick={() => handleAction('review')} className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2">
+              <Search size={18} /> Initiate Security Review
+            </button>
+          ) : (
+            <button onClick={handlePasskeyAuth} disabled={status === "verifying"} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl py-4 font-semibold flex items-center justify-center gap-2">
+              {status === "verifying" ? <Loader2 className="animate-spin" /> : <Fingerprint />}
+              Sign with Passkey
+            </button>
+          )}
 
-          <button 
-            onClick={handleDecline}
-            className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-xl py-3 flex items-center justify-center gap-2 transition-all border border-red-200"
-          >
-            <XCircle size={18} />
-            Decline & Flag as Fraud
+          <button onClick={() => handleAction('decline')} className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-xl py-3 border border-red-200 flex items-center justify-center gap-2">
+            <XCircle size={18} /> Decline & Flag
           </button>
         </div>
       </div>

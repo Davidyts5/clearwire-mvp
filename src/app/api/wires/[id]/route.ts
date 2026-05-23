@@ -1,90 +1,48 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import crypto from 'crypto';
-import { cookies } from 'next/headers';
+import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 
-// Extremely strict role checker that bypasses cache
-async function getRoleDirectlyFromDB(req: Request) {
-  try {
-    const authHeader = req.headers.get('cookie') || '';
-    const tokenMatch = authHeader.match(/(?:sb-access-token|supabase-auth-token)=([^;]+)/);
-    if (!tokenMatch) return 'guest';
-    
-    // We explicitly create a fresh client to ensure no cached roles leak through
-    const { data: { user }, error } = await supabase.auth.getUser(tokenMatch[1]);
-    if (error || !user) return 'guest';
+export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (req, { params }, auth) => {
+  // Defense-in-depth: explicitly verify this wire belongs to this user's company
+  await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-    const { data } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-      
-    return data?.role || 'guest';
-  } catch (e) {
-    return 'guest';
+  const { data, error } = await auth.supabase
+    .from('wire_requests')
+    .select('*')
+    .eq('id', params.id)
+    .single();
+
+  if (error) return NextResponse.json({ error: 'Wire not found' }, { status: 404 });
+  
+  const headers = new Headers();
+  headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  headers.set('Pragma', 'no-cache');
+  headers.set('Expires', '0');
+
+  return NextResponse.json(
+    { success: true, data, isCFO: auth.role === 'cfo' },
+    { status: 200, headers }
+  );
+});
+
+export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
+  await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+
+  const { action } = await req.json();
+
+  let newStatus = '';
+  if (action === 'decline') newStatus = 'denied';
+  else if (action === 'review') newStatus = 'under_review';
+  else return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+
+  const { data: updatedWire, error: rpcError } = await auth.supabase.rpc('transition_wire_state', {
+    p_wire_id: params.id,
+    p_new_status: newStatus,
+    p_actor_id: auth.userId
+  });
+
+  if (rpcError) {
+    return NextResponse.json({ error: rpcError.message }, { status: 400 });
   }
-}
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  try {
-    // Await the strict role checker
-    const role = await getRoleDirectlyFromDB(req);
-
-    const { data, error } = await supabase
-      .from('wire_requests')
-      .select('*')
-      .eq('id', params.id)
-      .single();
-
-    if (error) return NextResponse.json({ error: 'Wire not found' }, { status: 404 });
-    
-    // Force Next.js to not cache this response so the CFO/Clerk state doesn't get stuck
-    return NextResponse.json(
-      { success: true, data, isCFO: role === 'cfo', debugRole: role },
-      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
-    );
-  } catch (error) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
-}
-
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  try {
-    const role = await getRoleDirectlyFromDB(req);
-    
-    if (role !== 'cfo') {
-      return NextResponse.json({ error: 'Unauthorized: Only CFOs can cryptographically sign wires' }, { status: 403 });
-    }
-
-    const { action, credentialId } = await req.json();
-
-    if (action === 'decline') {
-      const { data, error } = await supabase
-        .from('wire_requests')
-        .update({ status: 'denied', approved_at: new Date().toISOString() })
-        .eq('id', params.id)
-        .select().single();
-      if (error) return NextResponse.json({ error: 'Failed to update database' }, { status: 500 });
-      return NextResponse.json({ success: true, data });
-    }
-
-    const hash = crypto.createHash('sha256').update(params.id + credentialId + Date.now()).digest('hex');
-    const cryptoHash = `0x${hash}`;
-
-    const { data, error } = await supabase
-      .from('wire_requests')
-      .update({ 
-        status: 'approved', 
-        cryptographic_hash: cryptoHash,
-        approved_at: new Date().toISOString()
-      })
-      .eq('id', params.id)
-      .select().single();
-
-    if (error) return NextResponse.json({ error: 'Failed to update database' }, { status: 500 });
-    return NextResponse.json({ success: true, data });
-  } catch (error) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
-  }
-}
+  return NextResponse.json({ success: true, data: updatedWire });
+});

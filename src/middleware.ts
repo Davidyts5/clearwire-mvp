@@ -1,31 +1,38 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(req: NextRequest) {
-  // Check for the Supabase session cookie manually instead of using the complex auth-helpers library
-  // This is much faster, far more stable on Vercel Edge, and fixes the 500 error instantly.
-  const authCookie = req.cookies.get('sb-access-token') || req.cookies.get('supabase-auth-token');
-  
-  const isAuthRoute = req.nextUrl.pathname.startsWith('/login');
-  const isProtectedRoute = req.nextUrl.pathname.startsWith('/dashboard') || req.nextUrl.pathname.startsWith('/cfo-portal');
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({ request: { headers: request.headers } })
 
-  // If trying to access a protected route without a cookie, kick to login
-  if (!authCookie && isProtectedRoute) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = '/login';
-    return NextResponse.redirect(redirectUrl);
-  }
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) { return request.cookies.get(name)?.value },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({ name, value, ...options })
+          response = NextResponse.next({ request: { headers: request.headers } })
+          response.cookies.set({ name, value, ...options })
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({ name, value: '', ...options })
+          response = NextResponse.next({ request: { headers: request.headers } })
+          response.cookies.set({ name, value: '', ...options })
+        },
+      },
+    }
+  )
 
-  // If trying to access login while already having a cookie, push to dashboard
-  if (authCookie && isAuthRoute) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = '/dashboard';
-    return NextResponse.redirect(redirectUrl);
-  }
+  const { data: { user } } = await supabase.auth.getUser()
 
-  return NextResponse.next();
+  const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
+  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/cfo-portal')
+
+  if (!user && isProtectedRoute) return NextResponse.redirect(new URL('/login', request.url))
+  if (user && isAuthRoute) return NextResponse.redirect(new URL('/dashboard', request.url))
+
+  return response
 }
 
-export const config = {
-  matcher: ['/dashboard/:path*', '/cfo-portal/:path*', '/login'],
-};
+export const config = { matcher: ['/dashboard/:path*', '/cfo-portal/:path*', '/login'] }
