@@ -18,6 +18,9 @@ export default function RegisterDevice() {
       const options = await resOptions.json();
       if (options.error) throw new Error(options.error);
 
+      // Note: @simplewebauthn/browser v9 automatically handles the conversion 
+      // of the Base64URL encoded userID back to a Uint8Array.
+
       // 2. Trigger Biometric Hardware
       const attResp = await startRegistration(options);
 
