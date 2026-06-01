@@ -6,12 +6,12 @@ import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-  const { data: authenticators } = await auth.supabase
+  const { data: authenticators, error: fetchError } = await auth.supabase
     .from('user_authenticators')
     .select('credential_id, transports')
     .eq('user_id', auth.userId);
 
-  if (!authenticators || authenticators.length === 0) {
+  if (fetchError || !authenticators || authenticators.length === 0) {
     return NextResponse.json({ error: 'No registered authenticators found. Please register a device first.' }, { status: 400 });
   }
 
@@ -27,12 +27,17 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
 
   const context = `wire_approval:${params.id}`;
   await auth.supabase.from('webauthn_challenges').delete().eq('user_id', auth.userId).eq('context', context);
-  await auth.supabase.from('webauthn_challenges').insert([{
+  
+  const { error: insertError } = await auth.supabase.from('webauthn_challenges').insert([{
     user_id: auth.userId,
     challenge: options.challenge,
     context: context,
     expires_at: new Date(Date.now() + 5 * 60000).toISOString()
   }]);
+
+  if (insertError) {
+    return NextResponse.json({ error: 'Database missing webauthn_challenges table.' }, { status: 500 });
+  }
 
   return NextResponse.json(options);
 });
