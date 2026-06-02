@@ -30,12 +30,15 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
     });
 
     if (verification.verified && verification.registrationInfo) {
-      const { credentialPublicKey, credentialID, counter, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+      // FIX: @simplewebauthn/server v13 moved these properties inside a nested 'credential' object.
+      // Older versions had them directly on registrationInfo. 
+      const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+      const { publicKey, id: credentialID, counter } = credential;
 
       const { error: insertError } = await auth.supabase.from('user_authenticators').insert([{
         user_id: auth.userId,
-        credential_id: body.id,
-        credential_public_key: uint8ArrayToBase64(credentialPublicKey),
+        credential_id: credentialID, // Use the extracted FIDO ID
+        credential_public_key: uint8ArrayToBase64(publicKey), // Now receives the actual Uint8Array instead of undefined
         counter: counter,
         credential_device_type: credentialDeviceType,
         credential_backed_up: credentialBackedUp,
