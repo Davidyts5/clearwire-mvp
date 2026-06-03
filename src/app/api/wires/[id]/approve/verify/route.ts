@@ -44,10 +44,8 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
     });
 
     if (verification.verified && verification.authenticationInfo) {
-      // FIX: @simplewebauthn/server v13 breaking changes on verification.authenticationInfo object
       const { newCounter } = verification.authenticationInfo;
 
-      // Replay Attack Prevention
       await auth.supabase
         .from('user_authenticators')
         .update({ counter: newCounter })
@@ -58,20 +56,32 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
         .delete()
         .eq('id', challengeData.id);
 
-      // Generate verifiable Hash from the actual FIDO signature
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature).digest('hex');
 
-      // ATOMIC STATE TRANSITION
-      const { data: updatedWire, error: rpcError } = await auth.supabase.rpc('transition_wire_state', {
-        p_wire_id: params.id,
-        p_new_status: 'approved',
-        p_actor_id: auth.userId,
-        p_crypto_hash: `0x${fidoSignatureHash}`
-      });
+      // FIX: Instead of calling the RPC function (which was missing from the DB), 
+      // do the state transition directly via Supabase API to guarantee it works.
+      const { data: updatedWire, error: updateError } = await auth.supabase
+        .from('wire_requests')
+        .update({ 
+          status: 'approved',
+          cfo_id: auth.userId,
+          cryptographic_hash: `0x${fidoSignatureHash}`,
+          approved_at: new Date().toISOString()
+        })
+        .eq('id', params.id)
+        .select()
+        .single();
 
-      if (rpcError) {
-        return NextResponse.json({ error: rpcError.message }, { status: 400 });
-      }
+      if (updateError) throw updateError;
+
+      // Add audit log
+      await auth.supabase.from('audit_logs').insert([{
+        company_id: auth.companyId,
+        wire_id: params.id,
+        actor_id: auth.userId,
+        action: 'STATE_CHANGED_TO_APPROVED',
+        new_hash: `0x${fidoSignatureHash}`
+      }]);
 
       return NextResponse.json({ success: true, data: updatedWire });
     }
