@@ -27,7 +27,8 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
   const body = await req.json();
   const parsed = WireSchema.parse(body);
 
-  const { data: vendorData } = await auth.supabase
+  // 1. Get or Create Vendor
+  const { data: vendorData, error: vendorFetchError } = await auth.supabase
     .from('vendors')
     .select('id, account_last_four')
     .eq('name', parsed.vendor)
@@ -37,14 +38,20 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
   let finalVendorId = vendorData?.id;
 
   if (!vendorData) {
-    const { data: newVendor } = await auth.supabase.from('vendors').insert([{ 
+    const { data: newVendor, error: vendorInsertError } = await auth.supabase.from('vendors').insert([{ 
       company_id: auth.companyId, 
       name: parsed.vendor,
       account_last_four: parsed.bank_account_last_four 
     }]).select().single();
+    
+    if (vendorInsertError) {
+      console.error("Vendor Insert Error:", vendorInsertError);
+      return NextResponse.json({ error: `Missing vendors table in database.` }, { status: 500 });
+    }
     finalVendorId = newVendor?.id;
   }
 
+  // 2. Evaluate Risk
   const riskAnalysis = await evaluateWireRisk(auth.supabase, {
     company_id: auth.companyId,
     vendor_id: finalVendorId,
@@ -55,6 +62,7 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
     bank_account_last_four: parsed.bank_account_last_four
   });
 
+  // 3. Insert Wire Request
   const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
     company_id: auth.companyId,
     vendor_id: finalVendorId,
@@ -62,17 +70,18 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
     amount: parseFloat(parsed.amount),
     purpose: parsed.purpose,
     risk_score: riskAnalysis.totalScore,
-    risk_reasons: JSON.stringify(riskAnalysis.reasons), // Stringify for JSONB compatibility
+    risk_reasons: JSON.stringify(riskAnalysis.reasons),
     clerk_id: auth.userId,
     status: riskAnalysis.recommendedStatus
   }]).select().single();
 
   if (dbError) {
-    console.error("DB Insert Error:", dbError);
-    return NextResponse.json({ error: `Database insert failed: Please ensure schema is synced.` }, { status: 500 });
+    console.error("Wire Request Insert Error:", dbError);
+    return NextResponse.json({ error: `Database missing required columns (vendor_id, risk_score, etc). Please run the sync script.` }, { status: 500 });
   }
 
-  await auth.supabase.from('audit_logs').insert([{
+  // 4. Insert Audit Log
+  const { error: auditError } = await auth.supabase.from('audit_logs').insert([{
     company_id: auth.companyId,
     wire_id: requestData.id,
     actor_id: auth.userId,
@@ -80,6 +89,12 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
     new_hash: 'INITIAL_STATE'
   }]);
 
+  if (auditError) {
+    console.error("Audit Log Insert Error:", auditError);
+    return NextResponse.json({ error: `Database missing audit_logs table. Please run the sync script.` }, { status: 500 });
+  }
+
+  // 5. Notifications
   if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
     try {
       const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
