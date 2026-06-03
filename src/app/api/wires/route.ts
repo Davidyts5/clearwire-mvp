@@ -4,11 +4,11 @@ import twilio from 'twilio';
 import { evaluateWireRisk } from '@/lib/risk-engine';
 import { withAuth } from '@/lib/api-auth';
 
-// Relaxed Zod validation to accommodate quick testing and shorter inputs
+// Relaxed Zod validation to accommodate quick testing
 const WireSchema = z.object({
   vendor: z.string().min(1, "Vendor name is required"),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid dollar amount"),
-  purpose: z.string().min(1, "Purpose is required"), // Changed from min(5) to min(1)
+  purpose: z.string().min(1, "Purpose is required"),
   destination_country: z.string().length(2).optional().or(z.literal('')),
   bank_account_last_four: z.string().length(4).optional().or(z.literal(''))
 });
@@ -28,7 +28,6 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
   try {
     const body = await req.json();
     
-    // Check validation manually to return clean error strings instead of a scary JSON dump
     const validationResult = WireSchema.safeParse(body);
     if (!validationResult.success) {
       const errorMessage = validationResult.error.issues.map(i => `${i.path[0]}: ${i.message}`).join(', ');
@@ -37,7 +36,6 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
     
     const parsed = validationResult.data;
 
-    // 1. Get or Create Vendor
     const { data: vendorData, error: vendorFetchError } = await auth.supabase
       .from('vendors')
       .select('id, account_last_four')
@@ -55,13 +53,11 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
       }]).select().single();
       
       if (vendorInsertError) {
-        console.error("Vendor Insert Error:", vendorInsertError);
         return NextResponse.json({ error: `Database missing vendors table. Please run the sync script.` }, { status: 500 });
       }
       finalVendorId = newVendor?.id;
     }
 
-    // 2. Evaluate Risk
     const riskAnalysis = await evaluateWireRisk(auth.supabase, {
       company_id: auth.companyId,
       vendor_id: finalVendorId,
@@ -72,7 +68,10 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
       bank_account_last_four: parsed.bank_account_last_four
     });
 
-    // 3. Insert Wire Request
+    // Generate the anti-AI phrase to satisfy the NOT NULL database constraint
+    const phrases = ["PURPLE ELEPHANT BATTERY", "RED SUNSET OCEAN", "BLUE MOUNTAIN CABIN", "YELLOW TIGER STRIPE", "SILVER COFFEE MUG"];
+    const antiAiPhrase = phrases[Math.floor(Math.random() * phrases.length)];
+
     const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
       company_id: auth.companyId,
       vendor_id: finalVendorId,
@@ -82,15 +81,15 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
       risk_score: riskAnalysis.totalScore,
       risk_reasons: JSON.stringify(riskAnalysis.reasons),
       clerk_id: auth.userId,
-      status: riskAnalysis.recommendedStatus
+      status: riskAnalysis.recommendedStatus,
+      anti_ai_phrase: antiAiPhrase // RESTORED FIX
     }]).select().single();
 
     if (dbError) {
       console.error("Wire Request Insert Error:", dbError);
-      return NextResponse.json({ error: `Database missing required columns. Please run the sync script.` }, { status: 500 });
+      return NextResponse.json({ error: `Database missing required columns. Error: ${dbError.message}` }, { status: 500 });
     }
 
-    // 4. Insert Audit Log
     const { error: auditError } = await auth.supabase.from('audit_logs').insert([{
       company_id: auth.companyId,
       wire_id: requestData.id,
@@ -100,11 +99,9 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
     }]);
 
     if (auditError) {
-      console.error("Audit Log Insert Error:", auditError);
       return NextResponse.json({ error: `Database missing audit_logs table. Please run the sync script.` }, { status: 500 });
     }
 
-    // 5. Notifications
     if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
       try {
         const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
