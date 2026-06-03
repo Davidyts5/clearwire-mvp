@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 
 export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
-  const wire = await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+  await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
   const body = await req.json();
   const context = `wire_approval:${params.id}`;
@@ -30,39 +30,55 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
 
   if (!authenticator) return NextResponse.json({ error: 'Authenticator not registered' }, { status: 400 });
 
-  const verification = await verifyAuthenticationResponse({
-    response: body,
-    expectedChallenge: challengeData.challenge,
-    expectedOrigin: getOrigin(req),
-    expectedRPID: getRpId(req),
-    authenticator: {
-      credentialID: authenticator.credential_id,
-      credentialPublicKey: base64ToUint8Array(authenticator.credential_public_key),
-      counter: Number(authenticator.counter),
-    },
-  });
-
-  if (verification.verified && verification.authenticationInfo) {
-    // Replay Attack Prevention
-    await auth.supabase.from('user_authenticators').update({ counter: verification.authenticationInfo.newCounter }).eq('id', authenticator.id);
-    await auth.supabase.from('webauthn_challenges').delete().eq('id', challengeData.id);
-
-    const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature).digest('hex');
-
-    // ATOMIC STATE TRANSITION
-    const { data: updatedWire, error: rpcError } = await auth.supabase.rpc('transition_wire_state', {
-      p_wire_id: params.id,
-      p_new_status: 'approved',
-      p_actor_id: auth.userId,
-      p_crypto_hash: `0x${fidoSignatureHash}`
+  try {
+    const verification = await verifyAuthenticationResponse({
+      response: body,
+      expectedChallenge: challengeData.challenge,
+      expectedOrigin: getOrigin(req),
+      expectedRPID: getRpId(req),
+      authenticator: {
+        credentialID: authenticator.credential_id,
+        credentialPublicKey: base64ToUint8Array(authenticator.credential_public_key),
+        counter: Number(authenticator.counter),
+      },
     });
 
-    if (rpcError) {
-      return NextResponse.json({ error: rpcError.message }, { status: 400 });
+    if (verification.verified && verification.authenticationInfo) {
+      // FIX: @simplewebauthn/server v13 breaking changes on verification.authenticationInfo object
+      const { newCounter } = verification.authenticationInfo;
+
+      // Replay Attack Prevention
+      await auth.supabase
+        .from('user_authenticators')
+        .update({ counter: newCounter })
+        .eq('id', authenticator.id);
+        
+      await auth.supabase
+        .from('webauthn_challenges')
+        .delete()
+        .eq('id', challengeData.id);
+
+      // Generate verifiable Hash from the actual FIDO signature
+      const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature).digest('hex');
+
+      // ATOMIC STATE TRANSITION
+      const { data: updatedWire, error: rpcError } = await auth.supabase.rpc('transition_wire_state', {
+        p_wire_id: params.id,
+        p_new_status: 'approved',
+        p_actor_id: auth.userId,
+        p_crypto_hash: `0x${fidoSignatureHash}`
+      });
+
+      if (rpcError) {
+        return NextResponse.json({ error: rpcError.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true, data: updatedWire });
     }
 
-    return NextResponse.json({ success: true, data: updatedWire });
+    return NextResponse.json({ error: 'Cryptographic Verification Failed' }, { status: 400 });
+  } catch (error: any) {
+    console.error("Authentication Verification Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
-
-  return NextResponse.json({ error: 'Cryptographic Verification Failed' }, { status: 400 });
 });
