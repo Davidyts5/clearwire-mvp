@@ -4,12 +4,13 @@ import twilio from 'twilio';
 import { evaluateWireRisk } from '@/lib/risk-engine';
 import { withAuth } from '@/lib/api-auth';
 
+// Relaxed Zod validation to accommodate quick testing and shorter inputs
 const WireSchema = z.object({
-  vendor: z.string().min(2),
-  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
-  purpose: z.string().min(5),
-  destination_country: z.string().length(2).optional(),
-  bank_account_last_four: z.string().length(4).optional()
+  vendor: z.string().min(1, "Vendor name is required"),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid dollar amount"),
+  purpose: z.string().min(1, "Purpose is required"), // Changed from min(5) to min(1)
+  destination_country: z.string().length(2).optional().or(z.literal('')),
+  bank_account_last_four: z.string().length(4).optional().or(z.literal(''))
 });
 
 export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (req, ctx, auth) => {
@@ -24,90 +25,103 @@ export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (re
 });
 
 export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => {
-  const body = await req.json();
-  const parsed = WireSchema.parse(body);
-
-  // 1. Get or Create Vendor
-  const { data: vendorData, error: vendorFetchError } = await auth.supabase
-    .from('vendors')
-    .select('id, account_last_four')
-    .eq('name', parsed.vendor)
-    .eq('company_id', auth.companyId)
-    .single();
-
-  let finalVendorId = vendorData?.id;
-
-  if (!vendorData) {
-    const { data: newVendor, error: vendorInsertError } = await auth.supabase.from('vendors').insert([{ 
-      company_id: auth.companyId, 
-      name: parsed.vendor,
-      account_last_four: parsed.bank_account_last_four 
-    }]).select().single();
+  try {
+    const body = await req.json();
     
-    if (vendorInsertError) {
-      console.error("Vendor Insert Error:", vendorInsertError);
-      return NextResponse.json({ error: `Missing vendors table in database.` }, { status: 500 });
+    // Check validation manually to return clean error strings instead of a scary JSON dump
+    const validationResult = WireSchema.safeParse(body);
+    if (!validationResult.success) {
+      const errorMessage = validationResult.error.issues.map(i => `${i.path[0]}: ${i.message}`).join(', ');
+      return NextResponse.json({ error: `Validation Error - ${errorMessage}` }, { status: 400 });
     }
-    finalVendorId = newVendor?.id;
-  }
+    
+    const parsed = validationResult.data;
 
-  // 2. Evaluate Risk
-  const riskAnalysis = await evaluateWireRisk(auth.supabase, {
-    company_id: auth.companyId,
-    vendor_id: finalVendorId,
-    vendor_name: parsed.vendor,
-    amount: parseFloat(parsed.amount),
-    purpose: parsed.purpose,
-    destination_country: parsed.destination_country,
-    bank_account_last_four: parsed.bank_account_last_four
-  });
+    // 1. Get or Create Vendor
+    const { data: vendorData, error: vendorFetchError } = await auth.supabase
+      .from('vendors')
+      .select('id, account_last_four')
+      .eq('name', parsed.vendor)
+      .eq('company_id', auth.companyId)
+      .single();
 
-  // 3. Insert Wire Request
-  const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
-    company_id: auth.companyId,
-    vendor_id: finalVendorId,
-    vendor_name_snapshot: parsed.vendor,
-    amount: parseFloat(parsed.amount),
-    purpose: parsed.purpose,
-    risk_score: riskAnalysis.totalScore,
-    risk_reasons: JSON.stringify(riskAnalysis.reasons),
-    clerk_id: auth.userId,
-    status: riskAnalysis.recommendedStatus
-  }]).select().single();
+    let finalVendorId = vendorData?.id;
 
-  if (dbError) {
-    console.error("Wire Request Insert Error:", dbError);
-    return NextResponse.json({ error: `Database missing required columns (vendor_id, risk_score, etc). Please run the sync script.` }, { status: 500 });
-  }
-
-  // 4. Insert Audit Log
-  const { error: auditError } = await auth.supabase.from('audit_logs').insert([{
-    company_id: auth.companyId,
-    wire_id: requestData.id,
-    actor_id: auth.userId,
-    action: 'CREATED',
-    new_hash: 'INITIAL_STATE'
-  }]);
-
-  if (auditError) {
-    console.error("Audit Log Insert Error:", auditError);
-    return NextResponse.json({ error: `Database missing audit_logs table. Please run the sync script.` }, { status: 500 });
-  }
-
-  // 5. Notifications
-  if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
-    try {
-      const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
-      const host = req.headers.get('host') || 'localhost:3000';
-      await client.messages.create({
-        body: `CLEARWIRE [Risk: ${riskAnalysis.totalScore}]: Wire request $${parsed.amount} to ${parsed.vendor}. Tap to sign: https://${host}/approve/${requestData.id}`,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: process.env.CFO_PHONE_NUMBER!
-      });
-    } catch (e) {
-      console.error("Twilio warning:", e);
+    if (!vendorData) {
+      const { data: newVendor, error: vendorInsertError } = await auth.supabase.from('vendors').insert([{ 
+        company_id: auth.companyId, 
+        name: parsed.vendor,
+        account_last_four: parsed.bank_account_last_four || null
+      }]).select().single();
+      
+      if (vendorInsertError) {
+        console.error("Vendor Insert Error:", vendorInsertError);
+        return NextResponse.json({ error: `Database missing vendors table. Please run the sync script.` }, { status: 500 });
+      }
+      finalVendorId = newVendor?.id;
     }
-  }
 
-  return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });
+    // 2. Evaluate Risk
+    const riskAnalysis = await evaluateWireRisk(auth.supabase, {
+      company_id: auth.companyId,
+      vendor_id: finalVendorId,
+      vendor_name: parsed.vendor,
+      amount: parseFloat(parsed.amount),
+      purpose: parsed.purpose,
+      destination_country: parsed.destination_country,
+      bank_account_last_four: parsed.bank_account_last_four
+    });
+
+    // 3. Insert Wire Request
+    const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
+      company_id: auth.companyId,
+      vendor_id: finalVendorId,
+      vendor_name_snapshot: parsed.vendor,
+      amount: parseFloat(parsed.amount),
+      purpose: parsed.purpose,
+      risk_score: riskAnalysis.totalScore,
+      risk_reasons: JSON.stringify(riskAnalysis.reasons),
+      clerk_id: auth.userId,
+      status: riskAnalysis.recommendedStatus
+    }]).select().single();
+
+    if (dbError) {
+      console.error("Wire Request Insert Error:", dbError);
+      return NextResponse.json({ error: `Database missing required columns. Please run the sync script.` }, { status: 500 });
+    }
+
+    // 4. Insert Audit Log
+    const { error: auditError } = await auth.supabase.from('audit_logs').insert([{
+      company_id: auth.companyId,
+      wire_id: requestData.id,
+      actor_id: auth.userId,
+      action: 'CREATED',
+      new_hash: 'INITIAL_STATE'
+    }]);
+
+    if (auditError) {
+      console.error("Audit Log Insert Error:", auditError);
+      return NextResponse.json({ error: `Database missing audit_logs table. Please run the sync script.` }, { status: 500 });
+    }
+
+    // 5. Notifications
+    if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
+      try {
+        const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+        const host = req.headers.get('host') || 'localhost:3000';
+        await client.messages.create({
+          body: `CLEARWIRE [Risk: ${riskAnalysis.totalScore}]: Wire request $${parsed.amount} to ${parsed.vendor}. Tap to sign: https://${host}/approve/${requestData.id}`,
+          from: process.env.TWILIO_PHONE_NUMBER,
+          to: process.env.CFO_PHONE_NUMBER!
+        });
+      } catch (e) {
+        console.error("Twilio warning:", e);
+      }
+    }
+
+    return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });
+  } catch (error: any) {
+    console.error("Route catch block:", error);
+    return NextResponse.json({ error: 'Server error parsing request' }, { status: 500 });
+  }
 });
