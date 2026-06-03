@@ -1,6 +1,13 @@
--- WEBAUTHN COMPLETE SCHEMA MIGRATION
+-- FINAL DATABASE SYNCHRONIZATION
+-- This script ensures all tables, columns, and structures are perfectly aligned with the codebase.
 
--- 1. Create the authenticators table
+-- 1. Ensure wire_requests has all necessary columns for the Risk Engine
+ALTER TABLE wire_requests ADD COLUMN IF NOT EXISTS vendor_id UUID REFERENCES vendors(id);
+ALTER TABLE wire_requests ADD COLUMN IF NOT EXISTS vendor_name_snapshot TEXT DEFAULT 'Unknown';
+ALTER TABLE wire_requests ADD COLUMN IF NOT EXISTS risk_score INTEGER DEFAULT 0;
+ALTER TABLE wire_requests ADD COLUMN IF NOT EXISTS risk_reasons JSONB;
+
+-- 2. Ensure Authenticators Table Exists
 CREATE TABLE IF NOT EXISTS user_authenticators (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -13,7 +20,7 @@ CREATE TABLE IF NOT EXISTS user_authenticators (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Create the challenges table
+-- 3. Ensure Challenges Table Exists
 CREATE TABLE IF NOT EXISTS webauthn_challenges (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -23,6 +30,6 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Temporarily disable RLS to avoid permission blocks during testing
+-- 4. Disable RLS for testing
 ALTER TABLE user_authenticators DISABLE ROW LEVEL SECURITY;
 ALTER TABLE webauthn_challenges DISABLE ROW LEVEL SECURITY;

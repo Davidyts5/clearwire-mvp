@@ -16,7 +16,7 @@ export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (re
   const { data, error } = await auth.supabase
     .from('wire_requests')
     .select('*')
-    .eq('company_id', auth.companyId) // Defense in depth
+    .eq('company_id', auth.companyId)
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 });
@@ -62,12 +62,15 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
     amount: parseFloat(parsed.amount),
     purpose: parsed.purpose,
     risk_score: riskAnalysis.totalScore,
-    risk_reasons: riskAnalysis.reasons,
+    risk_reasons: JSON.stringify(riskAnalysis.reasons), // Stringify for JSONB compatibility
     clerk_id: auth.userId,
     status: riskAnalysis.recommendedStatus
   }]).select().single();
 
-  if (dbError) throw dbError;
+  if (dbError) {
+    console.error("DB Insert Error:", dbError);
+    return NextResponse.json({ error: `Database insert failed: Please ensure schema is synced.` }, { status: 500 });
+  }
 
   await auth.supabase.from('audit_logs').insert([{
     company_id: auth.companyId,
