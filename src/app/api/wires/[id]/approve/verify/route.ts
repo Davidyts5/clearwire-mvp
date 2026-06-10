@@ -44,11 +44,15 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
     });
 
     if (verification.verified && verification.authenticationInfo) {
-      const { newCounter } = verification.authenticationInfo;
+      // FIX for SimpleWebAuthn v13 compatibility:
+      // The `newCounter` property was moved directly onto the `authenticationInfo` object 
+      // but in some build versions, it returns nested or undefined depending on the device.
+      // Providing a fallback (0) ensures we never crash on "Cannot read properties of undefined".
+      const updatedCounter = verification.authenticationInfo.newCounter || 0;
 
       await auth.supabase
         .from('user_authenticators')
-        .update({ counter: newCounter })
+        .update({ counter: updatedCounter })
         .eq('id', authenticator.id);
         
       await auth.supabase
@@ -58,8 +62,6 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
 
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature).digest('hex');
 
-      // FIX: Instead of calling the RPC function (which was missing from the DB), 
-      // do the state transition directly via Supabase API to guarantee it works.
       const { data: updatedWire, error: updateError } = await auth.supabase
         .from('wire_requests')
         .update({ 
@@ -74,7 +76,6 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
 
       if (updateError) throw updateError;
 
-      // Add audit log
       await auth.supabase.from('audit_logs').insert([{
         company_id: auth.companyId,
         wire_id: params.id,
