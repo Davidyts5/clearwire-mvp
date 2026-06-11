@@ -31,9 +31,6 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
   if (!authenticator) return NextResponse.json({ error: 'Authenticator not registered' }, { status: 400 });
 
   try {
-    // The crash is happening exactly HERE, during the verifyAuthenticationResponse call itself.
-    // The library expects the authenticator object to explicitly provide the counter as a number.
-    // If the database returns null or undefined for counter, Number(undefined) is NaN, causing the library internal crash.
     const currentCounter = authenticator.counter != null ? Number(authenticator.counter) : 0;
 
     const verification = await verifyAuthenticationResponse({
@@ -41,16 +38,22 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
       expectedChallenge: challengeData.challenge,
       expectedOrigin: getOrigin(req),
       expectedRPID: getRpId(req),
-      authenticator: {
-        credentialID: authenticator.credential_id,
-        credentialPublicKey: base64ToUint8Array(authenticator.credential_public_key),
-        counter: currentCounter, // FIXED: Explicitly handle null DB values
+      
+      // THE FIX IS HERE: 
+      // SimpleWebAuthn v13 renamed the 'authenticator' parameter to 'credential'.
+      // It also renamed the internal keys ('credentialPublicKey' became 'publicKey', 'credentialID' became 'id').
+      // Because we were passing the old v9 'authenticator' object, the library saw 'credential' as undefined, 
+      // which caused it to crash internally when it tried to read 'credential.counter'.
+      credential: {
+        id: authenticator.credential_id,
+        publicKey: base64ToUint8Array(authenticator.credential_public_key),
+        counter: currentCounter,
+        transports: authenticator.transports,
       },
     });
 
     if (verification.verified) {
       let updatedCounter = currentCounter;
-      // Some versions of the library return authenticationInfo, some don't.
       if (verification.authenticationInfo && typeof verification.authenticationInfo.newCounter === 'number') {
         updatedCounter = verification.authenticationInfo.newCounter;
       }
