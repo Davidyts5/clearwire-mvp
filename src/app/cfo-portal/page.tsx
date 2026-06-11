@@ -1,16 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldCheck, Loader2, ExternalLink, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { ShieldCheck, Loader2, ExternalLink, CheckCircle2, Clock, XCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 type WireRequest = {
   id: string;
-  vendor_name: string;
+  vendor_name_snapshot: string;
   amount: number;
   purpose: string;
-  status: "pending" | "approved" | "denied";
+  status: "pending" | "approved" | "denied" | "frozen" | "under_review";
   created_at: string;
 };
 
@@ -25,10 +25,12 @@ export default function CFOPortal() {
         const json = await res.json();
         
         if (json.success) {
-          // The CFO Portal specifically highlights 'pending' wires first
           const sortedData = json.data.sort((a: WireRequest, b: WireRequest) => {
-            if (a.status === 'pending' && b.status !== 'pending') return -1;
-            if (a.status !== 'pending' && b.status === 'pending') return 1;
+            const aNeedsAction = a.status === 'pending' || a.status === 'frozen';
+            const bNeedsAction = b.status === 'pending' || b.status === 'frozen';
+            
+            if (aNeedsAction && !bNeedsAction) return -1;
+            if (!aNeedsAction && bNeedsAction) return 1;
             return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
           });
           setRequests(sortedData);
@@ -42,7 +44,7 @@ export default function CFOPortal() {
     fetchWires();
   }, []);
 
-  const pendingCount = requests.filter(r => r.status === 'pending').length;
+  const pendingCount = requests.filter(r => r.status === 'pending' || r.status === 'frozen').length;
 
   return (
     <div className="max-w-5xl mx-auto mt-10 px-4 sm:px-6 lg:px-8">
@@ -55,7 +57,10 @@ export default function CFOPortal() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-sm font-medium bg-slate-800 border border-slate-700 px-4 py-2 rounded-full">
+          <Link href="/cfo-portal/team" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
+            <Users size={16} className="text-blue-400" /> Manage Team
+          </Link>
+          <div className="text-sm font-medium bg-blue-900/50 text-blue-200 border border-blue-800/50 px-4 py-2 rounded-lg">
             Role: CFO
           </div>
         </div>
@@ -90,19 +95,21 @@ export default function CFOPortal() {
               ) : requests.length === 0 ? (
                 <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No wires have been initiated by your AP department.</td></tr>
               ) : requests.map((req) => (
-                <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${req.status === 'pending' ? 'bg-blue-50/30' : ''}`}>
+                <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${(req.status === 'pending' || req.status === 'frozen') ? 'bg-blue-50/30' : ''}`}>
                   <td className="px-6 py-4 font-mono text-xs">
-                    <Link href={`/approve/${req.id}`} className={`flex items-center gap-1 font-semibold underline ${req.status === 'pending' ? 'text-blue-600 hover:text-blue-800' : 'text-slate-500 hover:text-slate-700'}`}>
-                      {req.status === 'pending' ? 'Review & Sign' : 'View Record'} <ExternalLink size={12} />
+                    <Link href={`/approve/${req.id}`} className={`flex items-center gap-1 font-semibold underline ${(req.status === 'pending' || req.status === 'frozen') ? 'text-blue-600 hover:text-blue-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                      {(req.status === 'pending' || req.status === 'frozen') ? 'Review & Sign' : 'View Record'} <ExternalLink size={12} />
                     </Link>
                   </td>
-                  <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name}</td>
+                  <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name_snapshot}</td>
                   <td className="px-6 py-4 text-slate-900 font-semibold">${Number(req.amount).toLocaleString()}</td>
                   <td className="px-6 py-4 text-slate-500 truncate max-w-[150px]">{req.purpose || '-'}</td>
                   <td className="px-6 py-4">
                     {req.status === "approved" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200"><CheckCircle2 size={14} /> Approved</span>}
                     {req.status === "denied" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><XCircle size={14} /> Declined</span>}
                     {req.status === "pending" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={14} /> Pending Auth</span>}
+                    {req.status === "frozen" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><Clock size={14} /> Frozen (High Risk)</span>}
+                    {req.status === "under_review" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={14} /> Under Review</span>}
                   </td>
                   <td className="px-6 py-4 text-right text-slate-500">
                     {new Date(req.created_at).toLocaleDateString()}
