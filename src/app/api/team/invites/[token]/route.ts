@@ -11,7 +11,6 @@ export async function GET(req: Request, { params }: { params: { token: string } 
   try {
     const supabase = createClient();
     
-    // Validate the token exists and is not expired
     const { data: invite, error } = await supabase
       .from('team_invites')
       .select('email, role, company_id, status, expires_at, companies(name)')
@@ -45,25 +44,12 @@ export async function GET(req: Request, { params }: { params: { token: string } 
 
 export async function POST(req: Request, { params }: { params: { token: string } }) {
   try {
-    // 1. We must bypass the standard authenticated client here because the user is NOT logged in yet.
-    // If we use the standard SSR client with RLS, the database will block the insert into the 'users' table.
-    // We instantiate the Service Role client to forcefully provision the account.
-    const { createClient: createAdminClient } = await import('@supabase/supabase-js');
-    const supabaseAdmin = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY! // Requires the secret Service Role key
-    );
-
-    // Fallback: If the user hasn't added the Service Role key to Vercel yet, 
-    // we use the standard client but it might fail RLS. 
-    // (We will instruct the user to add the Service Role key).
-    const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY 
-      ? supabaseAdmin 
-      : createClient();
-
     const body = await req.json();
     const parsed = AcceptInviteSchema.parse(body);
 
+    const supabase = createClient();
+
+    // 1. Validate Invite
     const { data: invite, error: inviteError } = await supabase
       .from('team_invites')
       .select('*')
@@ -73,6 +59,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
     if (inviteError || !invite) return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 });
 
+    // 2. Create User in Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: invite.email,
       password: parsed.password,
@@ -82,29 +69,29 @@ export async function POST(req: Request, { params }: { params: { token: string }
       return NextResponse.json({ error: authError?.message || 'Failed to create secure account' }, { status: 400 });
     }
 
-    // 2. Insert into the public.users table (This is what failed in the screenshot due to RLS)
-    const { error: dbError } = await supabase.from('users').insert([{
-      id: authData.user.id,
-      company_id: invite.company_id,
-      email: invite.email,
-      full_name: parsed.fullName,
-      role: invite.role
-    }]);
+    // 3. To completely bypass the RLS insert block on public.users without needing the Service Role Key, 
+    // we use a securely invoked PostgreSQL RPC (Stored Procedure) that runs with SECURITY DEFINER.
+    const { error: dbError } = await supabase.rpc('provision_invited_user', {
+      p_user_id: authData.user.id,
+      p_company_id: invite.company_id,
+      p_email: invite.email,
+      p_full_name: parsed.fullName,
+      p_role: invite.role,
+      p_invite_id: invite.id
+    });
 
     if (dbError) {
-      console.error("DB User Insert Error:", dbError);
+      console.error("RPC Provisioning Error:", dbError);
       
-      // If the insert fails, we must attempt to delete the orphaned Auth account
+      // Cleanup the orphaned auth user
+      const { createClient: createAdminClient } = await import('@supabase/supabase-js');
       if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-         await supabase.auth.admin.deleteUser(authData.user.id);
+         const adminClient = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
+         await adminClient.auth.admin.deleteUser(authData.user.id);
       }
-      
-      return NextResponse.json({ 
-        error: 'Failed to link account to company database. Please ensure you have added the SUPABASE_SERVICE_ROLE_KEY to Vercel.' 
-      }, { status: 500 });
-    }
 
-    await supabase.from('team_invites').update({ status: 'accepted' }).eq('id', invite.id);
+      return NextResponse.json({ error: `Provisioning RPC Failed: ${dbError.message}` }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
