@@ -27,12 +27,23 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/cfo-portal')
+  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
+                           request.nextUrl.pathname.startsWith('/cfo-portal') ||
+                           request.nextUrl.pathname.startsWith('/approve'); // FIX: Protect the approve route
 
-  if (!user && isProtectedRoute) return NextResponse.redirect(new URL('/login', request.url))
-  if (user && isAuthRoute) return NextResponse.redirect(new URL('/dashboard', request.url))
+  // If unauthenticated, redirect to login, but remember where they were trying to go!
+  if (!user && isProtectedRoute) {
+    const redirectUrl = new URL('/login', request.url);
+    redirectUrl.searchParams.set('next', request.nextUrl.pathname);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // If already logged in and visiting the login page, push to dashboard
+  if (user && isAuthRoute) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
 
   return response
 }
 
-export const config = { matcher: ['/dashboard/:path*', '/cfo-portal/:path*', '/login'] }
+export const config = { matcher: ['/dashboard/:path*', '/cfo-portal/:path*', '/approve/:path*', '/login'] }

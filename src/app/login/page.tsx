@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ShieldCheck, Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase"; // Correct client-side import for SSR
+import { createClient } from "@/lib/supabase"; 
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -26,8 +26,16 @@ export default function Login() {
       if (error) throw error;
 
       if (data.session) {
-        // Because we upgraded to @supabase/ssr, the client automatically handles the cookies via Next.js router.
-        // We just need to route them based on their role in the public.users table.
+        // FIX: Check if there is a 'next' redirect parameter in the URL (e.g., from an SMS link)
+        const params = new URLSearchParams(window.location.search);
+        const nextUrl = params.get('next');
+
+        if (nextUrl && nextUrl.startsWith('/')) {
+          window.location.href = nextUrl;
+          return;
+        }
+
+        // Standard routing
         const { data: userData } = await supabase
           .from('users')
           .select('role')
@@ -71,7 +79,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  placeholder="ap@yourcompany.com"
+                  placeholder="cfo@yourcompany.com"
                 />
               </div>
             </div>
