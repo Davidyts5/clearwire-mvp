@@ -10,14 +10,12 @@ const InviteSchema = z.object({
 
 export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
   try {
-    // 1. Fetch existing users
     const { data: teamMembers, error: usersError } = await auth.supabase
       .from('users')
       .select('id, email, full_name, role, created_at')
       .eq('company_id', auth.companyId)
       .order('created_at', { ascending: true });
 
-    // 2. Fetch pending invites
     const { data: pendingInvites, error: invitesError } = await auth.supabase
       .from('team_invites')
       .select('id, email, role, status, expires_at, created_at')
@@ -27,7 +25,16 @@ export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
 
     if (usersError || invitesError) throw new Error("Database fetch failed");
 
-    return NextResponse.json({ success: true, data: { teamMembers, pendingInvites } });
+    // FIX: Force dynamic data fetch, explicitly bypassing Next.js cache
+    const headers = new Headers();
+    headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    headers.set('Pragma', 'no-cache');
+    headers.set('Expires', '0');
+
+    return NextResponse.json(
+      { success: true, data: { teamMembers, pendingInvites } },
+      { status: 200, headers }
+    );
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -38,7 +45,6 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
     const body = await req.json();
     const parsed = InviteSchema.parse(body);
 
-    // Ensure the user doesn't already exist in the company
     const { data: existingUser } = await auth.supabase
       .from('users')
       .select('id')
@@ -50,7 +56,6 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
       return NextResponse.json({ error: 'User is already part of the team.' }, { status: 400 });
     }
 
-    // Generate secure token (valid for 48 hours)
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
@@ -68,12 +73,9 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
       .single();
 
     if (insertError) {
-      // If it violates the unique constraint, it means a pending invite already exists
       return NextResponse.json({ error: 'An invite is already pending for this email.' }, { status: 400 });
     }
 
-    // In production, we would use Resend/SendGrid to email the link.
-    // For MVP, we will return the magic link to the CFO's dashboard so they can copy/paste it.
     const host = req.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const magicLink = `${protocol}://${host}/invite/${token}`;
