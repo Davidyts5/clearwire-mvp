@@ -1,24 +1,39 @@
 "use client";
 
-import { useEffect } from "react";
-import { LogOut } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { useEffect, useState } from "react";
+import { LogOut, Loader2 } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { createClient } from "@/lib/supabase"; // Correctly import the SSR-compatible browser client
 
 export default function SessionManager() {
   const pathname = usePathname();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const isAuthRoute = pathname === '/login' || pathname === '/';
 
   const handleLogout = async () => {
-    // 1. Tell Supabase to kill the session on the backend
-    await supabase.auth.signOut();
-    
-    // 2. Mathematically destroy the secure cookies in the browser
-    document.cookie = 'sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure';
-    document.cookie = 'supabase-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure';
-    
-    // 3. Force redirect to login
-    window.location.href = '/login';
+    setIsLoggingOut(true);
+    try {
+      const supabase = createClient();
+      
+      // 1. Tell Supabase to kill the session on the backend
+      await supabase.auth.signOut();
+      
+      // 2. Overwrite all possible session cookies to ensure the middleware drops the user
+      const domains = [window.location.hostname, `.${window.location.hostname}`];
+      
+      domains.forEach(domain => {
+        document.cookie = `sb-access-token=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
+        document.cookie = `sb-refresh-token=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
+        document.cookie = `supabase-auth-token=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
+      });
+      
+      // 3. Force hard redirect to login
+      window.location.href = '/login';
+    } catch (e) {
+      console.error("Logout failed", e);
+      // Fallback redirect even if Supabase fails
+      window.location.href = '/login';
+    }
   };
 
   useEffect(() => {
@@ -58,9 +73,11 @@ export default function SessionManager() {
       </div>
       <button 
         onClick={handleLogout} 
-        className="flex items-center gap-1.5 text-sm font-medium text-slate-300 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 shadow-sm"
+        disabled={isLoggingOut}
+        className="flex items-center gap-1.5 text-sm font-medium text-slate-300 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 shadow-sm disabled:opacity-50"
       >
-        <LogOut size={16} /> Logout
+        {isLoggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />} 
+        {isLoggingOut ? "Logging out..." : "Logout"}
       </button>
     </div>
   );
