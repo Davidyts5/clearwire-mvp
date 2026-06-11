@@ -22,7 +22,11 @@ export default function TeamManagement() {
 
   const fetchTeam = async () => {
     try {
-      const res = await fetch('/api/team/invites');
+      // NUCLEAR CACHE BUSTER: 
+      // Next.js aggressive client-side caching often ignores backend headers.
+      // By appending a unique timestamp to the URL, the browser treats it as a brand new request every single time.
+      const cacheBuster = new Date().getTime();
+      const res = await fetch(`/api/team/invites?t=${cacheBuster}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         setTeam(json.data.teamMembers);
