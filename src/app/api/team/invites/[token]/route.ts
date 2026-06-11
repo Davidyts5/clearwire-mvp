@@ -12,7 +12,6 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     const supabase = createClient();
     
     // Validate the token exists and is not expired
-    // Need to bypass RLS here because the user is not logged in yet when they click the email link
     const { data: invite, error } = await supabase
       .from('team_invites')
       .select('email, role, company_id, status, expires_at, companies(name)')
@@ -46,7 +45,22 @@ export async function GET(req: Request, { params }: { params: { token: string } 
 
 export async function POST(req: Request, { params }: { params: { token: string } }) {
   try {
-    const supabase = createClient();
+    // 1. We must bypass the standard authenticated client here because the user is NOT logged in yet.
+    // If we use the standard SSR client with RLS, the database will block the insert into the 'users' table.
+    // We instantiate the Service Role client to forcefully provision the account.
+    const { createClient: createAdminClient } = await import('@supabase/supabase-js');
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY! // Requires the secret Service Role key
+    );
+
+    // Fallback: If the user hasn't added the Service Role key to Vercel yet, 
+    // we use the standard client but it might fail RLS. 
+    // (We will instruct the user to add the Service Role key).
+    const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY 
+      ? supabaseAdmin 
+      : createClient();
+
     const body = await req.json();
     const parsed = AcceptInviteSchema.parse(body);
 
@@ -68,6 +82,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
       return NextResponse.json({ error: authError?.message || 'Failed to create secure account' }, { status: 400 });
     }
 
+    // 2. Insert into the public.users table (This is what failed in the screenshot due to RLS)
     const { error: dbError } = await supabase.from('users').insert([{
       id: authData.user.id,
       company_id: invite.company_id,
@@ -77,15 +92,23 @@ export async function POST(req: Request, { params }: { params: { token: string }
     }]);
 
     if (dbError) {
-      return NextResponse.json({ error: 'Failed to link account to company database. Check RLS policies.' }, { status: 500 });
+      console.error("DB User Insert Error:", dbError);
+      
+      // If the insert fails, we must attempt to delete the orphaned Auth account
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+         await supabase.auth.admin.deleteUser(authData.user.id);
+      }
+      
+      return NextResponse.json({ 
+        error: 'Failed to link account to company database. Please ensure you have added the SUPABASE_SERVICE_ROLE_KEY to Vercel.' 
+      }, { status: 500 });
     }
 
-    // Since we created the user via backend API, we must force them to login via the frontend
-    // to properly set the secure cookies.
     await supabase.from('team_invites').update({ status: 'accepted' }).eq('id', invite.id);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    console.error("Invite Accept Catch Error:", error);
     return NextResponse.json({ error: error.message || 'Server error accepting invite' }, { status: 500 });
   }
 }
