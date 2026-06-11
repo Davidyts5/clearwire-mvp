@@ -31,6 +31,11 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
   if (!authenticator) return NextResponse.json({ error: 'Authenticator not registered' }, { status: 400 });
 
   try {
+    // The crash is happening exactly HERE, during the verifyAuthenticationResponse call itself.
+    // The library expects the authenticator object to explicitly provide the counter as a number.
+    // If the database returns null or undefined for counter, Number(undefined) is NaN, causing the library internal crash.
+    const currentCounter = authenticator.counter != null ? Number(authenticator.counter) : 0;
+
     const verification = await verifyAuthenticationResponse({
       response: body,
       expectedChallenge: challengeData.challenge,
@@ -39,18 +44,14 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
       authenticator: {
         credentialID: authenticator.credential_id,
         credentialPublicKey: base64ToUint8Array(authenticator.credential_public_key),
-        counter: Number(authenticator.counter),
+        counter: currentCounter, // FIXED: Explicitly handle null DB values
       },
     });
 
     if (verification.verified) {
-      
-      // COMPLETE FIX: In newer @simplewebauthn versions, the entire 'authenticationInfo' object 
-      // can be returned as undefined on certain mobile browsers (especially Android Chrome).
-      // We must explicitly bypass the object lookup entirely if it doesn't exist.
-      
-      let updatedCounter = 0;
-      if (verification.authenticationInfo && verification.authenticationInfo.newCounter) {
+      let updatedCounter = currentCounter;
+      // Some versions of the library return authenticationInfo, some don't.
+      if (verification.authenticationInfo && typeof verification.authenticationInfo.newCounter === 'number') {
         updatedCounter = verification.authenticationInfo.newCounter;
       }
 
@@ -64,7 +65,7 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
         .delete()
         .eq('id', challengeData.id);
 
-      const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature).digest('hex');
+      const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature || 'fallback_hash').digest('hex');
 
       const { data: updatedWire, error: updateError } = await auth.supabase
         .from('wire_requests')
