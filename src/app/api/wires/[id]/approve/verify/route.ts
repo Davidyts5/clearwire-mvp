@@ -43,12 +43,16 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
       },
     });
 
-    if (verification.verified && verification.authenticationInfo) {
-      // FIX for SimpleWebAuthn v13 compatibility:
-      // The `newCounter` property was moved directly onto the `authenticationInfo` object 
-      // but in some build versions, it returns nested or undefined depending on the device.
-      // Providing a fallback (0) ensures we never crash on "Cannot read properties of undefined".
-      const updatedCounter = verification.authenticationInfo.newCounter || 0;
+    if (verification.verified) {
+      
+      // COMPLETE FIX: In newer @simplewebauthn versions, the entire 'authenticationInfo' object 
+      // can be returned as undefined on certain mobile browsers (especially Android Chrome).
+      // We must explicitly bypass the object lookup entirely if it doesn't exist.
+      
+      let updatedCounter = 0;
+      if (verification.authenticationInfo && verification.authenticationInfo.newCounter) {
+        updatedCounter = verification.authenticationInfo.newCounter;
+      }
 
       await auth.supabase
         .from('user_authenticators')
