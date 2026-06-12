@@ -23,7 +23,8 @@ export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (re
   return NextResponse.json({ success: true, data });
 });
 
-export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => {
+// FIX: Restrict wire creation strictly to AP Clerks (Segregation of Duties)
+export const POST = withAuth(['clerk'], async (req, ctx, auth) => {
   try {
     const body = await req.json();
     
@@ -35,7 +36,7 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
     
     const parsed = validationResult.data;
 
-    const { data: vendorData } = await auth.supabase
+    const { data: vendorData, error: vendorFetchError } = await auth.supabase
       .from('vendors')
       .select('id, account_last_four')
       .eq('name', parsed.vendor)
@@ -73,7 +74,7 @@ export const POST = withAuth(['clerk', 'controller'], async (req, ctx, auth) => 
     const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
       company_id: auth.companyId,
       vendor_id: finalVendorId,
-      vendor_name: parsed.vendor, // FIX: In v1 the column was 'vendor_name', in v2 I called it 'vendor_name_snapshot'. I am passing BOTH to satisfy the old database constraint.
+      vendor_name: parsed.vendor, 
       vendor_name_snapshot: parsed.vendor,
       amount: parseFloat(parsed.amount),
       purpose: parsed.purpose,

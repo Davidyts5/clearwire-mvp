@@ -3,7 +3,8 @@ import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { rpName, getRpId, getOrigin, uint8ArrayToBase64 } from '@/lib/webauthn';
 import { withAuth } from '@/lib/api-auth';
 
-export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
+// Allow both CFOs and Controllers
+export const POST = withAuth(['cfo', 'controller'], async (req, ctx, auth) => {
   const body = await req.json();
 
   const { data: challengeData, error: fetchError } = await auth.supabase
@@ -30,15 +31,13 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
     });
 
     if (verification.verified && verification.registrationInfo) {
-      // FIX: @simplewebauthn/server v13 moved these properties inside a nested 'credential' object.
-      // Older versions had them directly on registrationInfo. 
       const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
       const { publicKey, id: credentialID, counter } = credential;
 
       const { error: insertError } = await auth.supabase.from('user_authenticators').insert([{
         user_id: auth.userId,
-        credential_id: credentialID, // Use the extracted FIDO ID
-        credential_public_key: uint8ArrayToBase64(publicKey), // Now receives the actual Uint8Array instead of undefined
+        credential_id: credentialID, 
+        credential_public_key: uint8ArrayToBase64(publicKey), 
         counter: counter,
         credential_device_type: credentialDeviceType,
         credential_backed_up: credentialBackedUp,

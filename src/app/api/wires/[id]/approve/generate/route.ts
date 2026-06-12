@@ -3,8 +3,20 @@ import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { getRpId } from '@/lib/webauthn';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 
-export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
+// Both Controllers and CFOs can generate passkey challenges
+export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+
+  // 1. DYNAMIC POLICY ENGINE: Verify Approval Limits
+  const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
+  
+  if (auth.role === 'controller') {
+    const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
+    const controllerLimit = userData?.approval_limit || 0;
+    if (wireData.amount > controllerLimit) {
+      return NextResponse.json({ error: `Unauthorized: You are only authorized to approve wires up to $${Number(controllerLimit).toLocaleString()}` }, { status: 403 });
+    }
+  }
 
   const { data: authenticators, error: fetchError } = await auth.supabase
     .from('user_authenticators')

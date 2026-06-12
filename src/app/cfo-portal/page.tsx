@@ -17,11 +17,26 @@ type WireRequest = {
 export default function CFOPortal() {
   const [requests, setRequests] = useState<WireRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [role, setRole] = useState<string>("manager");
+  const [limit, setLimit] = useState<number>(0);
 
   useEffect(() => {
-    const fetchWires = async () => {
+    const fetchWiresAndContext = async () => {
       try {
-        const res = await fetch('/api/wires');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('role, approval_limit')
+            .eq('id', session.user.id)
+            .single();
+            
+          setRole(userData?.role || "manager");
+          setLimit(userData?.approval_limit || 0);
+        }
+
+        const cacheBuster = new Date().getTime();
+        const res = await fetch(`/api/wires?t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         
         if (json.success) {
@@ -41,7 +56,7 @@ export default function CFOPortal() {
         setIsLoading(false);
       }
     };
-    fetchWires();
+    fetchWiresAndContext();
   }, []);
 
   const pendingCount = requests.filter(r => r.status === 'pending' || r.status === 'frozen').length;
@@ -56,12 +71,17 @@ export default function CFOPortal() {
             <p className="text-slate-400 text-sm">Secure authorization environment</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <Link href="/cfo-portal/team" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
-            <Users size={16} className="text-blue-400" /> Manage Team
+        <div className="flex flex-wrap items-center gap-3">
+          {role === 'cfo' && (
+            <Link href="/cfo-portal/team" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
+              <Users size={16} className="text-blue-400" /> Team
+            </Link>
+          )}
+          <Link href="/cfo-portal/devices" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
+             Device Registration
           </Link>
-          <div className="text-sm font-medium bg-blue-900/50 text-blue-200 border border-blue-800/50 px-4 py-2 rounded-lg">
-            Role: CFO
+          <div className="text-sm font-medium bg-blue-900/50 text-blue-200 border border-blue-800/50 px-4 py-2 rounded-lg uppercase">
+            Role: {role} {role === 'controller' && `(Max $${Number(limit).toLocaleString()})`}
           </div>
         </div>
       </div>
@@ -97,9 +117,14 @@ export default function CFOPortal() {
               ) : requests.map((req) => (
                 <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${(req.status === 'pending' || req.status === 'frozen') ? 'bg-blue-50/30' : ''}`}>
                   <td className="px-6 py-4 font-mono text-xs">
-                    <Link href={`/approve/${req.id}`} className={`flex items-center gap-1 font-semibold underline ${(req.status === 'pending' || req.status === 'frozen') ? 'text-blue-600 hover:text-blue-800' : 'text-slate-500 hover:text-slate-700'}`}>
-                      {(req.status === 'pending' || req.status === 'frozen') ? 'Review & Sign' : 'View Record'} <ExternalLink size={12} />
-                    </Link>
+                    {/* Visual filter for controllers so they don't click links they can't approve */}
+                    {role === 'controller' && req.amount > limit ? (
+                      <span className="text-slate-400 flex items-center gap-1 font-semibold cursor-not-allowed">Requires CFO <ExternalLink size={12} /></span>
+                    ) : (
+                      <Link href={`/approve/${req.id}`} className={`flex items-center gap-1 font-semibold underline ${(req.status === 'pending' || req.status === 'frozen') ? 'text-blue-600 hover:text-blue-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                        {(req.status === 'pending' || req.status === 'frozen') ? 'Review & Sign' : 'View Record'} <ExternalLink size={12} />
+                      </Link>
+                    )}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name_snapshot}</td>
                   <td className="px-6 py-4 text-slate-900 font-semibold">${Number(req.amount).toLocaleString()}</td>

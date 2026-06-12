@@ -17,14 +17,37 @@ export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (re
   headers.set('Pragma', 'no-cache');
   headers.set('Expires', '0');
 
+  // DYNAMIC POLICY ENGINE: Check if controller is authorized based on THEIR SPECIFIC limit
+  const isCFO = auth.role === 'cfo';
+  let isControllerAuthorized = false;
+
+  if (auth.role === 'controller') {
+    const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
+    const controllerLimit = userData?.approval_limit || 0;
+    isControllerAuthorized = data.amount <= controllerLimit;
+  }
+
+  const canApprove = isCFO || isControllerAuthorized;
+
   return NextResponse.json(
-    { success: true, data, isCFO: auth.role === 'cfo' },
+    { success: true, data, isCFO: canApprove },
     { status: 200, headers }
   );
 });
 
-export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
-  await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth) => {
+  const wire = await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+
+  // DYNAMIC POLICY ENGINE: Verify limits for state transitions
+  const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
+  
+  if (auth.role === 'controller') {
+    const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
+    const controllerLimit = userData?.approval_limit || 0;
+    if (wireData.amount > controllerLimit) {
+      return NextResponse.json({ error: `Unauthorized: You are only authorized to approve wires up to $${Number(controllerLimit).toLocaleString()}` }, { status: 403 });
+    }
+  }
 
   const { action } = await req.json();
 
@@ -34,7 +57,6 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
   else return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 
   try {
-    // FIX: Execute state transition directly instead of relying on the RPC function
     const { data: updatedWire, error: updateError } = await auth.supabase
       .from('wire_requests')
       .update({ 
@@ -48,7 +70,6 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
 
     if (updateError) throw updateError;
 
-    // Add audit log
     await auth.supabase.from('audit_logs').insert([{
       company_id: auth.companyId,
       wire_id: params.id,

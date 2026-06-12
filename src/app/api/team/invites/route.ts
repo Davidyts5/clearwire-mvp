@@ -5,7 +5,8 @@ import { withAuth } from '@/lib/api-auth';
 
 const InviteSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['clerk', 'controller', 'cfo', 'auditor'])
+  role: z.enum(['clerk', 'controller', 'cfo', 'auditor']),
+  approval_limit: z.number().min(0).optional().default(0)
 });
 
 async function getAdminClient() {
@@ -16,28 +17,23 @@ async function getAdminClient() {
 
 export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
   try {
-    // 1. Because the CFO is already authenticated and verified by 'withAuth',
-    // we can safely use the Admin client to fetch the team roster.
-    // This securely bypasses the restrictive RLS policy on the users table 
-    // that prevents them from seeing anyone except themselves.
     const supabaseAdmin = await getAdminClient();
 
     const { data: teamMembers, error: usersError } = await supabaseAdmin
       .from('users')
-      .select('id, email, full_name, role, created_at')
-      .eq('company_id', auth.companyId) // Critically scoped to their company only
+      .select('id, email, full_name, role, approval_limit, created_at')
+      .eq('company_id', auth.companyId)
       .order('created_at', { ascending: true });
 
     const { data: pendingInvites, error: invitesError } = await supabaseAdmin
       .from('team_invites')
-      .select('id, email, role, status, expires_at, created_at')
+      .select('id, email, role, approval_limit, status, expires_at, created_at')
       .eq('company_id', auth.companyId)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
     if (usersError || invitesError) throw new Error("Database fetch failed");
 
-    // Force dynamic fetch
     const headers = new Headers();
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     headers.set('Pragma', 'no-cache');
@@ -79,6 +75,7 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
         company_id: auth.companyId,
         email: parsed.email,
         role: parsed.role,
+        approval_limit: parsed.role === 'controller' ? parsed.approval_limit : 0,
         invited_by: auth.userId,
         token: token,
         expires_at: expiresAt

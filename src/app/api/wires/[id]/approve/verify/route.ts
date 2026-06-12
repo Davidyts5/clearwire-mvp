@@ -4,8 +4,20 @@ import { getRpId, getOrigin, base64ToUint8Array } from '@/lib/webauthn';
 import crypto from 'crypto';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 
-export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
+// Both Controllers and CFOs can verify passkey challenges
+export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+
+  // DYNAMIC POLICY ENGINE: Verify Limits
+  const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
+  
+  if (auth.role === 'controller') {
+    const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
+    const controllerLimit = userData?.approval_limit || 0;
+    if (wireData.amount > controllerLimit) {
+      return NextResponse.json({ error: `Unauthorized: You are only authorized to approve wires up to $${Number(controllerLimit).toLocaleString()}` }, { status: 403 });
+    }
+  }
 
   const body = await req.json();
   const context = `wire_approval:${params.id}`;
@@ -38,12 +50,6 @@ export const POST = withAuth(['cfo'], async (req, { params }, auth) => {
       expectedChallenge: challengeData.challenge,
       expectedOrigin: getOrigin(req),
       expectedRPID: getRpId(req),
-      
-      // THE FIX IS HERE: 
-      // SimpleWebAuthn v13 renamed the 'authenticator' parameter to 'credential'.
-      // It also renamed the internal keys ('credentialPublicKey' became 'publicKey', 'credentialID' became 'id').
-      // Because we were passing the old v9 'authenticator' object, the library saw 'credential' as undefined, 
-      // which caused it to crash internally when it tried to read 'credential.counter'.
       credential: {
         id: authenticator.credential_id,
         publicKey: base64ToUint8Array(authenticator.credential_public_key),

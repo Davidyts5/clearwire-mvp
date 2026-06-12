@@ -7,20 +7,11 @@ const AcceptInviteSchema = z.object({
   fullName: z.string().min(2, "Full name is required")
 });
 
-// Helper to safely get the Admin client to bypass RLS
-async function getAdminClient() {
-  const { createClient: createAdmin } = await import('@supabase/supabase-js');
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SERVICE_ROLE_KEY");
-  return createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
-
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   try {
-    // 1. MUST use Admin client here because the user clicking the link is NOT logged in yet.
-    // Standard RLS would block this read.
-    const supabaseAdmin = await getAdminClient();
+    const supabase = createClient();
     
-    const { data: invite, error } = await supabaseAdmin
+    const { data: invite, error } = await supabase
       .from('team_invites')
       .select('email, role, company_id, status, expires_at, companies(name)')
       .eq('token', params.token)
@@ -38,7 +29,6 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       return NextResponse.json({ error: 'Invite link has expired' }, { status: 400 });
     }
 
-    // Pass data safely to the frontend
     return NextResponse.json({ 
       success: true, 
       data: {
@@ -48,7 +38,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       } 
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Server error parsing token' }, { status: 500 });
+    return NextResponse.json({ error: 'Server error parsing token' }, { status: 500 });
   }
 }
 
@@ -57,10 +47,9 @@ export async function POST(req: Request, { params }: { params: { token: string }
     const body = await req.json();
     const parsed = AcceptInviteSchema.parse(body);
 
-    const supabaseAdmin = await getAdminClient();
+    const supabase = createClient();
 
-    // 1. Validate Invite
-    const { data: invite, error: inviteError } = await supabaseAdmin
+    const { data: invite, error: inviteError } = await supabase
       .from('team_invites')
       .select('*')
       .eq('token', params.token)
@@ -69,8 +58,6 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
     if (inviteError || !invite) return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 });
 
-    // 2. Create User in Auth using standard client so the session is generated
-    const supabase = createClient();
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: invite.email,
       password: parsed.password,
@@ -80,23 +67,30 @@ export async function POST(req: Request, { params }: { params: { token: string }
       return NextResponse.json({ error: authError?.message || 'Failed to create secure account' }, { status: 400 });
     }
 
-    // 3. Provision User bypassing RLS via RPC
+    // Passes the specific approval_limit stored on the invite directly to the user's new profile
     const { error: dbError } = await supabase.rpc('provision_invited_user', {
       p_user_id: authData.user.id,
       p_company_id: invite.company_id,
       p_email: invite.email,
       p_full_name: parsed.fullName,
       p_role: invite.role,
-      p_invite_id: invite.id
+      p_invite_id: invite.id,
+      p_approval_limit: invite.approval_limit || 0
     });
 
     if (dbError) {
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      return NextResponse.json({ error: `Provisioning Failed: ${dbError.message}` }, { status: 500 });
+      console.error("RPC Provisioning Error:", dbError);
+      const { createClient: createAdminClient } = await import('@supabase/supabase-js');
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+         const adminClient = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
+         await adminClient.auth.admin.deleteUser(authData.user.id);
+      }
+      return NextResponse.json({ error: `Provisioning RPC Failed: ${dbError.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    console.error("Invite Accept Catch Error:", error);
     return NextResponse.json({ error: error.message || 'Server error accepting invite' }, { status: 500 });
   }
 }

@@ -77,7 +77,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
   if (status === "loading") return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
   if (status === "error" || !wireDetails) return <div className="text-center mt-20 text-red-500 font-medium">Invalid Wire Request.</div>;
-  if (status === "unauthorized") return <div className="text-center mt-20 text-red-500 font-medium">Access Denied. CFO Privileges Required.</div>;
+  if (status === "unauthorized") return <div className="text-center mt-20 text-red-500 font-medium">Access Denied. Insufficient Authorization Tier.</div>;
 
   if (status === "denied") {
     return (
