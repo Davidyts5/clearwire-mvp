@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ShieldAlert, CheckCircle2, Clock, FileText, Loader2, ExternalLink, XCircle } from "lucide-react";
+import { Plus, ShieldAlert, CheckCircle2, Clock, FileText, Loader2, ExternalLink, XCircle, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { ROLES, Permissions } from "@/lib/roles";
@@ -76,12 +76,26 @@ export default function Dashboard() {
     }
   };
 
+  // Only Clerks can access this specific Dashboard route
+  if (!isLoading && userRole && userRole !== ROLES.CLERK) {
+    // If somehow a non-clerk ends up here, gracefully guide them away
+    return (
+      <div className="text-center mt-20 p-8 max-w-md mx-auto bg-white rounded-xl shadow-sm border border-slate-200">
+        <h2 className="text-xl font-bold text-slate-900 mb-2">Wrong Portal</h2>
+        <p className="text-slate-500 mb-6">This dashboard is strictly for Accounts Payable Clerks to draft wires.</p>
+        <Link href={Permissions.getPortalRoute(userRole as any)} className="text-blue-600 font-medium hover:underline">
+          Go to your Executive Portal &rarr;
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Accounts Payable Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage outbound wires and cryptographically verify approvals.</p>
+          <p className="text-slate-500 text-sm mt-1">Draft outbound wires for executive authorization.</p>
         </div>
         {userRole === ROLES.CLERK && (
           <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-colors">
@@ -104,11 +118,12 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {isLoading ? <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">Loading secure wires...</td></tr> : 
-               requests.length === 0 ? <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">No requests yet.</td></tr> : 
+              {isLoading ? <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">Loading your secure wires...</td></tr> : 
+               requests.length === 0 ? <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">No requests drafted yet.</td></tr> : 
                requests.map((req) => (
                 <tr key={req.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4 font-mono text-xs">
+                    {/* Clerks should never see "Review & Sign". They only get "View Record". */}
                     <Link href={`/approve/${req.id}`} className="text-blue-600 hover:text-blue-800 flex items-center gap-1 font-semibold underline">
                       {req.id.substring(0, 8)}... <ExternalLink size={12} />
                     </Link>

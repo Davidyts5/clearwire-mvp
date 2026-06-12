@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ShieldCheck, Loader2, ExternalLink, CheckCircle2, Clock, XCircle, Users, Settings } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { ROLES, Permissions } from "@/lib/roles";
 
 type WireRequest = {
   id: string;
@@ -17,7 +18,7 @@ type WireRequest = {
 export default function CFOPortal() {
   const [requests, setRequests] = useState<WireRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [role, setRole] = useState<string>(""); // FIX: Remove hardcoded "manager" default
+  const [role, setRole] = useState<string>("");
   const [limit, setLimit] = useState<number>(0);
 
   useEffect(() => {
@@ -59,6 +60,19 @@ export default function CFOPortal() {
     fetchWiresAndContext();
   }, []);
 
+  // Strict Routing Protection: Clerks should not access the Executive Portal
+  if (!isLoading && role === ROLES.CLERK) {
+    return (
+      <div className="text-center mt-20 p-8 max-w-md mx-auto bg-white rounded-xl shadow-sm border border-slate-200">
+        <h2 className="text-xl font-bold text-slate-900 mb-2">Wrong Portal</h2>
+        <p className="text-slate-500 mb-6">This executive dashboard is restricted. Please return to the AP drafting dashboard.</p>
+        <Link href={Permissions.getPortalRoute(role as any)} className="text-blue-600 font-medium hover:underline">
+          Go to your AP Portal &rarr;
+        </Link>
+      </div>
+    );
+  }
+
   const pendingCount = requests.filter(r => r.status === 'pending' || r.status === 'frozen').length;
 
   return (
@@ -72,21 +86,23 @@ export default function CFOPortal() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {role === 'cfo' && (
+          {Permissions.canManageTeam(role as any) && (
             <Link href="/cfo-portal/team" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
               <Users size={16} className="text-blue-400" /> Team
             </Link>
           )}
-          {role === 'cfo' && (
+          {Permissions.canManageSettings(role as any) && (
             <Link href="/cfo-portal/settings" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
               <Settings size={16} className="text-slate-300" /> Policies
             </Link>
           )}
-          <Link href="/cfo-portal/devices" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
-             Device Registration
-          </Link>
+          {Permissions.canRegisterDevice(role as any) && (
+            <Link href="/cfo-portal/devices" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
+               Device Registration
+            </Link>
+          )}
           <div className="text-sm font-medium bg-blue-900/50 text-blue-200 border border-blue-800/50 px-4 py-2 rounded-lg uppercase">
-            Role: {role} {role === 'controller' && `(Max $${Number(limit).toLocaleString()})`}
+            Role: {role} {role === ROLES.CONTROLLER && `(Max $${Number(limit).toLocaleString()})`}
           </div>
         </div>
       </div>
@@ -95,7 +111,7 @@ export default function CFOPortal() {
         
         <div className="flex justify-between items-end mb-6">
           <h2 className="text-xl font-bold text-slate-900">Wire Authorization Queue</h2>
-          {pendingCount > 0 && (
+          {pendingCount > 0 && !Permissions.isReadOnly(role as any) && (
             <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full border border-amber-200 animate-pulse">
               {pendingCount} Action Required
             </span>
@@ -118,33 +134,49 @@ export default function CFOPortal() {
               {isLoading ? (
                 <tr><td colSpan={6} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" /></td></tr>
               ) : requests.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No wires have been initiated by your AP department.</td></tr>
-              ) : requests.map((req) => (
-                <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${(req.status === 'pending' || req.status === 'frozen') ? 'bg-blue-50/30' : ''}`}>
-                  <td className="px-6 py-4 font-mono text-xs">
-                    {role === 'controller' && req.amount > limit ? (
-                      <span className="text-slate-400 flex items-center gap-1 font-semibold cursor-not-allowed">Requires CFO <ExternalLink size={12} /></span>
-                    ) : (
-                      <Link href={`/approve/${req.id}`} className={`flex items-center gap-1 font-semibold underline ${(req.status === 'pending' || req.status === 'frozen') ? 'text-blue-600 hover:text-blue-800' : 'text-slate-500 hover:text-slate-700'}`}>
-                        {(req.status === 'pending' || req.status === 'frozen') ? 'Review & Sign' : 'View Record'} <ExternalLink size={12} />
-                      </Link>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name_snapshot}</td>
-                  <td className="px-6 py-4 text-slate-900 font-semibold">${Number(req.amount).toLocaleString()}</td>
-                  <td className="px-6 py-4 text-slate-500 truncate max-w-[150px]">{req.purpose || '-'}</td>
-                  <td className="px-6 py-4">
-                    {req.status === "approved" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200"><CheckCircle2 size={14} /> Approved</span>}
-                    {req.status === "denied" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><XCircle size={14} /> Declined</span>}
-                    {req.status === "pending" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={14} /> Pending Auth</span>}
-                    {req.status === "frozen" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><Clock size={14} /> Frozen (High Risk)</span>}
-                    {req.status === "under_review" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={14} /> Under Review</span>}
-                  </td>
-                  <td className="px-6 py-4 text-right text-slate-500">
-                    {new Date(req.created_at).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No wires require action at this time.</td></tr>
+              ) : requests.map((req) => {
+                
+                // Smart UI Rendering: Only show actionable links if the user is legally allowed to approve it
+                const isPendingOrFrozen = req.status === 'pending' || req.status === 'frozen';
+                let canClickToApprove = false;
+                
+                if (isPendingOrFrozen) {
+                   if (role === ROLES.CFO) canClickToApprove = true;
+                   if (role === ROLES.CONTROLLER && req.amount <= limit) canClickToApprove = true;
+                }
+
+                return (
+                  <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${canClickToApprove ? 'bg-blue-50/30' : ''}`}>
+                    <td className="px-6 py-4 font-mono text-xs">
+                      {Permissions.isReadOnly(role as any) ? (
+                        <Link href={`/approve/${req.id}`} className="flex items-center gap-1 font-semibold text-slate-500 hover:text-slate-700 underline">
+                          View Audit <ExternalLink size={12} />
+                        </Link>
+                      ) : role === ROLES.CONTROLLER && req.amount > limit ? (
+                        <span className="text-slate-400 flex items-center gap-1 font-semibold cursor-not-allowed">Requires CFO <ExternalLink size={12} /></span>
+                      ) : (
+                        <Link href={`/approve/${req.id}`} className={`flex items-center gap-1 font-semibold underline ${canClickToApprove ? 'text-blue-600 hover:text-blue-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                          {canClickToApprove ? 'Review & Sign' : 'View Record'} <ExternalLink size={12} />
+                        </Link>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name_snapshot}</td>
+                    <td className="px-6 py-4 text-slate-900 font-semibold">${Number(req.amount).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-slate-500 truncate max-w-[150px]">{req.purpose || '-'}</td>
+                    <td className="px-6 py-4">
+                      {req.status === "approved" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200"><CheckCircle2 size={14} /> Approved</span>}
+                      {req.status === "denied" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><XCircle size={14} /> Declined</span>}
+                      {req.status === "pending" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={14} /> Pending Auth</span>}
+                      {req.status === "frozen" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><AlertTriangle size={14} /> Frozen</span>}
+                      {req.status === "under_review" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={14} /> Under Review</span>}
+                    </td>
+                    <td className="px-6 py-4 text-right text-slate-500">
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
