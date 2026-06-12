@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { startAuthentication } from "@simplewebauthn/browser";
+import { supabase } from "@/lib/supabase";
 
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
   const [status, setStatus] = useState<string>("loading");
   const [wireDetails, setWireDetails] = useState<any>(null);
 
   useEffect(() => {
-    const fetchWire = async () => {
+    const fetchWireAndVerifyRole = async () => {
       try {
         const cacheBuster = new Date().getTime();
         const res = await fetch(`/api/wires/${params.id}?t=${cacheBuster}`, { cache: 'no-store' });
@@ -18,14 +19,43 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         
         if (!json.success) return setStatus("error");
         setWireDetails(json.data);
+
+        // 1. Backend authorization check (We passed 'isCFO' from the API to mean 'isAuthorized')
         if (!json.isCFO) return setStatus("unauthorized");
+
+        // 2. Strict Frontend Double-Check (Bypassing Next.js Cache)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return setStatus("unauthorized");
+
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role, approval_limit')
+          .eq('id', session.user.id)
+          .single();
+
+        if (!userData) return setStatus("unauthorized");
+
+        // FIX: Remove the hardcoded 'cfo' block and dynamically check limits for Controllers
+        if (userData.role === 'clerk' || userData.role === 'auditor') {
+          return setStatus("unauthorized");
+        }
+
+        if (userData.role === 'controller') {
+          const limit = Number(userData.approval_limit || 0);
+          const amount = Number(json.data.amount);
+          
+          if (amount > limit) {
+             return setStatus("unauthorized");
+          }
+        }
 
         setStatus(json.data.status);
       } catch (err) {
         setStatus("error");
       }
     };
-    fetchWire();
+    
+    fetchWireAndVerifyRole();
   }, [params.id]);
 
   const handleAction = async (action: 'decline' | 'review') => {
@@ -77,14 +107,28 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
   if (status === "loading") return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
   if (status === "error" || !wireDetails) return <div className="text-center mt-20 text-red-500 font-medium">Invalid Wire Request.</div>;
-  if (status === "unauthorized") return <div className="text-center mt-20 text-red-500 font-medium">Access Denied. Insufficient Authorization Tier.</div>;
+  
+  if (status === "unauthorized") {
+    return (
+      <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <ShieldCheck size={32} />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
+        <p className="text-slate-500 mb-6">
+          Your account role or approval limit does not authorize you to cryptographically sign this wire transfer.
+        </p>
+        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
+      </div>
+    );
+  }
 
   if (status === "denied") {
     return (
       <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
         <XCircle size={32} className="mx-auto text-red-600 mb-4" />
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Transfer Declined</h2>
-        <Link href="/cfo-portal" className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
+        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
       </div>
     );
   }
@@ -97,7 +141,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs text-slate-500 break-all text-left mb-6">
           HASH: {wireDetails.cryptographic_hash}
         </div>
-        <Link href="/cfo-portal" className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
+        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
       </div>
     );
   }
