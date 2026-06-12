@@ -30,7 +30,12 @@ export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
       data = newSettings;
     }
 
-    return NextResponse.json({ success: true, data });
+    const headers = new Headers();
+    headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    headers.set('Pragma', 'no-cache');
+    headers.set('Expires', '0');
+
+    return NextResponse.json({ success: true, data }, { status: 200, headers });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldCheck, Loader2, ExternalLink, CheckCircle2, Clock, XCircle, Users } from "lucide-react";
+import { ShieldCheck, Loader2, ExternalLink, CheckCircle2, Clock, XCircle, Users, Settings } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -17,7 +17,7 @@ type WireRequest = {
 export default function CFOPortal() {
   const [requests, setRequests] = useState<WireRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [role, setRole] = useState<string>("manager");
+  const [role, setRole] = useState<string>(""); // FIX: Remove hardcoded "manager" default
   const [limit, setLimit] = useState<number>(0);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export default function CFOPortal() {
             .eq('id', session.user.id)
             .single();
             
-          setRole(userData?.role || "manager");
+          setRole(userData?.role || "");
           setLimit(userData?.approval_limit || 0);
         }
 
@@ -77,6 +77,11 @@ export default function CFOPortal() {
               <Users size={16} className="text-blue-400" /> Team
             </Link>
           )}
+          {role === 'cfo' && (
+            <Link href="/cfo-portal/settings" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
+              <Settings size={16} className="text-slate-300" /> Policies
+            </Link>
+          )}
           <Link href="/cfo-portal/devices" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
              Device Registration
           </Link>
@@ -117,7 +122,6 @@ export default function CFOPortal() {
               ) : requests.map((req) => (
                 <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${(req.status === 'pending' || req.status === 'frozen') ? 'bg-blue-50/30' : ''}`}>
                   <td className="px-6 py-4 font-mono text-xs">
-                    {/* Visual filter for controllers so they don't click links they can't approve */}
                     {role === 'controller' && req.amount > limit ? (
                       <span className="text-slate-400 flex items-center gap-1 font-semibold cursor-not-allowed">Requires CFO <ExternalLink size={12} /></span>
                     ) : (

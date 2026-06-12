@@ -12,7 +12,8 @@ export default function SecuritySettings() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch('/api/settings');
+        const cacheBuster = new Date().getTime();
+        const res = await fetch(`/api/settings?t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         if (json.success && json.data.approval_tiers?.tier1?.max) {
           setLimit(json.data.approval_tiers.tier1.max);
@@ -39,7 +40,7 @@ export default function SecuritySettings() {
       const json = await res.json();
       
       if (json.success) {
-        alert("Approval Matrix updated successfully.");
+        alert("Global Controller limit updated successfully. For user-specific limits, use the Team Management tab.");
       } else {
         alert(json.error);
       }
@@ -70,22 +71,18 @@ export default function SecuritySettings() {
         <div className="md:col-span-2 bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
             <TrendingUp className="text-emerald-500" size={24} />
-            <h2 className="text-xl font-bold text-slate-900">Controller Approval Limits</h2>
+            <h2 className="text-xl font-bold text-slate-900">Global Controller Default Limit</h2>
           </div>
           
           <div className="mb-6">
             <p className="text-slate-600 text-sm mb-4">
-              Set the maximum dollar amount a <strong>Controller</strong> is allowed to cryptographically sign without requiring CFO intervention. Any wire above this limit will require your direct FaceID authorization.
+              Set the <strong>default</strong> maximum dollar amount new Controllers are allowed to cryptographically sign. This limit can be overridden per-user in the Team Management tab.
             </p>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
-              <ShieldCheck className="shrink-0 text-blue-600" size={20} />
-              <p>For maximum security, limit day-to-day AP controllers to $10,000 or $50,000. Set to $0 to force all wires to require CFO approval.</p>
-            </div>
           </div>
 
           <form onSubmit={handleSave} className="space-y-6">
             <div>
-              <label className="block text-sm font-bold text-slate-900 mb-2">Maximum Wire Amount (USD)</label>
+              <label className="block text-sm font-bold text-slate-900 mb-2">Default Maximum Wire Amount (USD)</label>
               {isLoading ? (
                 <div className="h-12 bg-slate-100 rounded-lg animate-pulse w-full max-w-xs"></div>
               ) : (
