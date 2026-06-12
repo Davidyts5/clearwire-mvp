@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { getRpId, getOrigin, base64ToUint8Array } from '@/lib/webauthn';
 import crypto from 'crypto';
-import { withAuth, verifyTenantResource } from '@/lib/api-auth';
+import { withAuth, verifyTenantResource, verifySegregationOfDuties, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+  
+  // SECURITY FIX: Enforce Segregation of Duties (SoD)
+  await verifySegregationOfDuties(auth.supabase, params.id, auth.userId);
 
   const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
   
@@ -68,32 +71,23 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature || 'fallback_hash').digest('hex');
 
-      const { data: updatedWire, error: updateError } = await auth.supabase
-        .from('wire_requests')
-        .update({ 
-          status: 'approved',
-          cfo_id: auth.userId,
-          cryptographic_hash: `0x${fidoSignatureHash}`,
-          approved_at: new Date().toISOString()
-        })
-        .eq('id', params.id)
-        .select()
-        .single();
+      // SECURITY FIX: Execute state transition using the secured Admin RPC
+      const adminClient = await getAdminClient();
+      const { data: updatedWire, error: rpcError } = await adminClient.rpc('transition_wire_state', {
+        p_wire_id: params.id,
+        p_new_status: 'approved',
+        p_actor_id: auth.userId,
+        p_crypto_hash: `0x${fidoSignatureHash}`
+      });
 
-      if (updateError) throw updateError;
-
-      await auth.supabase.from('audit_logs').insert([{
-        company_id: auth.companyId,
-        wire_id: params.id,
-        actor_id: auth.userId,
-        action: 'STATE_CHANGED_TO_APPROVED',
-        new_hash: `0x${fidoSignatureHash}`
-      }]);
+      if (rpcError) throw new Error(rpcError.message);
 
       return NextResponse.json({ success: true, data: updatedWire });
     }
+
     return NextResponse.json({ error: 'Cryptographic Verification Failed' }, { status: 400 });
   } catch (error: any) {
+    console.error("Authentication Verification Error:", error);
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 });

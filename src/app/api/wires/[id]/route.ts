@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { withAuth, verifyTenantResource } from '@/lib/api-auth';
-import { ROLES, ROLE_VALUES, Permissions } from '@/lib/roles';
+import { withAuth, verifyTenantResource, verifySegregationOfDuties, getAdminClient } from '@/lib/api-auth';
+import { ROLES, ROLE_VALUES } from '@/lib/roles';
 
 export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-  // STRICT CLERK REQUIREMENT: Clerks can only view their own wires
   let query = auth.supabase.from('wire_requests').select('*').eq('id', params.id);
   if (auth.role === ROLES.CLERK) {
     query = query.eq('clerk_id', auth.userId);
@@ -19,7 +18,6 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   headers.set('Pragma', 'no-cache');
   headers.set('Expires', '0');
 
-  // Verify Controller Limits dynamically
   const isCFO = auth.role === ROLES.CFO;
   let isControllerAuthorized = false;
 
@@ -38,7 +36,8 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
 });
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
-  const wire = await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+  await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+  await verifySegregationOfDuties(auth.supabase, params.id, auth.userId);
 
   const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
   
@@ -58,29 +57,18 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
   else return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 
   try {
-    const { data: updatedWire, error: updateError } = await auth.supabase
-      .from('wire_requests')
-      .update({ 
-        status: newStatus,
-        cfo_id: auth.userId,
-        approved_at: new Date().toISOString()
-      })
-      .eq('id', params.id)
-      .select()
-      .single();
+    const adminClient = await getAdminClient();
+    const { data: updatedWire, error: rpcError } = await adminClient.rpc('transition_wire_state', {
+      p_wire_id: params.id,
+      p_new_status: newStatus,
+      p_actor_id: auth.userId
+    });
 
-    if (updateError) throw updateError;
-
-    await auth.supabase.from('audit_logs').insert([{
-      company_id: auth.companyId,
-      wire_id: params.id,
-      actor_id: auth.userId,
-      action: `STATE_CHANGED_TO_${newStatus.toUpperCase()}`,
-      new_hash: 'SYSTEM_GENERATED'
-    }]);
+    if (rpcError) throw new Error(rpcError.message);
 
     return NextResponse.json({ success: true, data: updatedWire });
   } catch (error: any) {
+    console.error("State Transition Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 });

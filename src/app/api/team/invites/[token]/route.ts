@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { getAdminClient } from '@/lib/api-auth';
 
 const AcceptInviteSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters long"),
@@ -9,9 +10,11 @@ const AcceptInviteSchema = z.object({
 
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   try {
-    const supabase = createClient();
+    // SECURITY FIX: Unauthenticated users hit RLS blocks. 
+    // We MUST use the Admin Client to securely fetch the invite without leaking data.
+    const supabaseAdmin = await getAdminClient();
     
-    const { data: invite, error } = await supabase
+    const { data: invite, error } = await supabaseAdmin
       .from('team_invites')
       .select('email, role, company_id, status, expires_at, companies(name)')
       .eq('token', params.token)
@@ -32,8 +35,9 @@ export async function POST(req: Request, { params }: { params: { token: string }
     const body = await req.json();
     const parsed = AcceptInviteSchema.parse(body);
     const supabase = createClient();
+    const supabaseAdmin = await getAdminClient();
 
-    const { data: invite, error: inviteError } = await supabase
+    const { data: invite, error: inviteError } = await supabaseAdmin
       .from('team_invites')
       .select('*')
       .eq('token', params.token)
@@ -45,7 +49,8 @@ export async function POST(req: Request, { params }: { params: { token: string }
     const { data: authData, error: authError } = await supabase.auth.signUp({ email: invite.email, password: parsed.password });
     if (authError || !authData.user) return NextResponse.json({ error: authError?.message || 'Failed to create secure account' }, { status: 400 });
 
-    const { error: dbError } = await supabase.rpc('provision_invited_user', {
+    // SECURITY FIX: Execute RPC with Service Role client, as public access was revoked
+    const { error: dbError } = await supabaseAdmin.rpc('provision_invited_user', {
       p_user_id: authData.user.id,
       p_company_id: invite.company_id,
       p_email: invite.email,
@@ -56,11 +61,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
     });
 
     if (dbError) {
-      const { createClient: createAdminClient } = await import('@supabase/supabase-js');
-      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-         const adminClient = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
-         await adminClient.auth.admin.deleteUser(authData.user.id);
-      }
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(console.error);
       return NextResponse.json({ error: `Provisioning RPC Failed: ${dbError.message}` }, { status: 500 });
     }
 

@@ -27,21 +27,38 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
-                           request.nextUrl.pathname.startsWith('/cfo-portal') ||
-                           request.nextUrl.pathname.startsWith('/approve'); 
+  const isDashboard = request.nextUrl.pathname.startsWith('/dashboard')
+  const isCfoPortal = request.nextUrl.pathname.startsWith('/cfo-portal')
+  const isApprove = request.nextUrl.pathname.startsWith('/approve')
+  const isInviteRoute = request.nextUrl.pathname.startsWith('/invite')
 
-  // Exclude /invite route from auth checks
-  const isInviteRoute = request.nextUrl.pathname.startsWith('/invite');
-
-  if (!user && isProtectedRoute && !isInviteRoute) {
-    const redirectUrl = new URL('/login', request.url);
-    redirectUrl.searchParams.set('next', request.nextUrl.pathname);
-    return NextResponse.redirect(redirectUrl);
+  // 1. UNAUTHENTICATED USERS: Enforce login walls
+  if (!user) {
+    if (isDashboard || isCfoPortal || isApprove) {
+      const redirectUrl = new URL('/login', request.url);
+      redirectUrl.searchParams.set('next', request.nextUrl.pathname);
+      return NextResponse.redirect(redirectUrl);
+    }
+    return response;
   }
 
-  if (user && isAuthRoute) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+  // 2. AUTHENTICATED USERS: Enforce strict role-based routing at the Edge
+  const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
+  const role = userData?.role;
+
+  // Protect Clerk routes
+  if (isDashboard && role !== 'clerk') {
+    return NextResponse.redirect(new URL('/cfo-portal', request.url));
+  }
+
+  // Protect Executive routes
+  if (isCfoPortal && role === 'clerk') {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  // Handle post-login routing fallback
+  if (isAuthRoute) {
+    return NextResponse.redirect(new URL(role === 'clerk' ? '/dashboard' : '/cfo-portal', request.url));
   }
 
   return response

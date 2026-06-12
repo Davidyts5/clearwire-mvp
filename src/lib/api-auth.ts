@@ -9,10 +9,13 @@ export type AuthContext = {
   supabase: any; 
 };
 
-/**
- * Centralized API Authentication & Authorization Wrapper
- * Enforces SSR Session Validity, Tenant Linking, and Scoped RBAC.
- */
+// Returns an Admin client with Service Role privileges. Must be used with extreme caution.
+export async function getAdminClient() {
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SERVICE_ROLE_KEY");
+  return createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
 export function withAuth(
   allowedRoles: Role[],
   handler: (req: Request, context: any, auth: AuthContext) => Promise<NextResponse> | NextResponse
@@ -57,9 +60,6 @@ export function withAuth(
   };
 }
 
-/**
- * Defense-in-Depth Tenant Resource Check.
- */
 export async function verifyTenantResource(supabase: any, table: string, id: string, companyId: string) {
   const { data, error } = await supabase.from(table).select('company_id').eq('id', id).single();
   
@@ -71,5 +71,14 @@ export async function verifyTenantResource(supabase: any, table: string, id: str
     throw new Error(`CRITICAL: Tenant isolation violation. Resource belongs to ${data.company_id}, not ${companyId}`);
   }
   
+  return data;
+}
+
+export async function verifySegregationOfDuties(supabase: any, wireId: string, userId: string) {
+  const { data, error } = await supabase.from('wire_requests').select('clerk_id').eq('id', wireId).single();
+  if (error || !data) throw new Error(`Resource not found`);
+  if (data.clerk_id === userId) {
+    throw new Error("SOD_VIOLATION: Segregation of Duties. You cannot approve or override a wire request you created.");
+  }
   return true;
 }
