@@ -5,10 +5,12 @@ import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Se
 import Link from "next/link";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { supabase } from "@/lib/supabase";
+import { ROLES, Permissions } from "@/lib/roles";
 
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
   const [status, setStatus] = useState<string>("loading");
   const [wireDetails, setWireDetails] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>("");
 
   useEffect(() => {
     const fetchWireAndVerifyRole = async () => {
@@ -20,10 +22,8 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         if (!json.success) return setStatus("error");
         setWireDetails(json.data);
 
-        // 1. Backend authorization check (We passed 'isCFO' from the API to mean 'isAuthorized')
-        if (!json.isCFO) return setStatus("unauthorized");
+        if (!json.canApprove) return setStatus("unauthorized");
 
-        // 2. Strict Frontend Double-Check (Bypassing Next.js Cache)
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return setStatus("unauthorized");
 
@@ -34,19 +34,16 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
           .single();
 
         if (!userData) return setStatus("unauthorized");
+        setUserRole(userData.role);
 
-        // FIX: Remove the hardcoded 'cfo' block and dynamically check limits for Controllers
-        if (userData.role === 'clerk' || userData.role === 'auditor') {
+        if (Permissions.isReadOnly(userData.role as any) || userData.role === ROLES.CLERK) {
           return setStatus("unauthorized");
         }
 
-        if (userData.role === 'controller') {
+        if (userData.role === ROLES.CONTROLLER) {
           const limit = Number(userData.approval_limit || 0);
           const amount = Number(json.data.amount);
-          
-          if (amount > limit) {
-             return setStatus("unauthorized");
-          }
+          if (amount > limit) return setStatus("unauthorized");
         }
 
         setStatus(json.data.status);
@@ -118,7 +115,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         <p className="text-slate-500 mb-6">
           Your account role or approval limit does not authorize you to cryptographically sign this wire transfer.
         </p>
-        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
+        <Link href={Permissions.getPortalRoute(userRole as any)} className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
       </div>
     );
   }
@@ -128,7 +125,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
       <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
         <XCircle size={32} className="mx-auto text-red-600 mb-4" />
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Transfer Declined</h2>
-        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
+        <Link href={Permissions.getPortalRoute(userRole as any)} className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
       </div>
     );
   }
@@ -141,7 +138,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs text-slate-500 break-all text-left mb-6">
           HASH: {wireDetails.cryptographic_hash}
         </div>
-        <Link href="/dashboard" className="text-blue-600 font-medium hover:underline">Return to Dashboard</Link>
+        <Link href={Permissions.getPortalRoute(userRole as any)} className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
       </div>
     );
   }

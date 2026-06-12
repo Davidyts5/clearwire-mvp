@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
+import { ROLE_VALUES } from '@/lib/roles';
 
-// Defense-in-depth: the PDF endpoint is now fully secured behind SSR Auth and Tenant verification
-export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (req, { params }, auth) => {
-  const wire = await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
+  await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
   const { data, error } = await auth.supabase
     .from('wire_requests')

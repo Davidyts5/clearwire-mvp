@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { withAuth } from '@/lib/api-auth';
+import { ROLES } from '@/lib/roles';
 
 const InviteSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['clerk', 'controller', 'cfo', 'auditor']),
+  role: z.enum([ROLES.CLERK, ROLES.CONTROLLER, ROLES.CFO, ROLES.AUDITOR]),
   approval_limit: z.number().min(0).optional().default(0)
 });
 
@@ -15,7 +16,7 @@ async function getAdminClient() {
   return createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
-export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
+export const GET = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
     const supabaseAdmin = await getAdminClient();
 
@@ -39,16 +40,13 @@ export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
     headers.set('Pragma', 'no-cache');
     headers.set('Expires', '0');
 
-    return NextResponse.json(
-      { success: true, data: { teamMembers, pendingInvites } },
-      { status: 200, headers }
-    );
+    return NextResponse.json({ success: true, data: { teamMembers, pendingInvites } }, { status: 200, headers });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 });
 
-export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
+export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
     const body = await req.json();
     const parsed = InviteSchema.parse(body);
@@ -62,9 +60,7 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
       .eq('email', parsed.email)
       .single();
 
-    if (existingUser) {
-      return NextResponse.json({ error: 'User is already part of the team.' }, { status: 400 });
-    }
+    if (existingUser) return NextResponse.json({ error: 'User is already part of the team.' }, { status: 400 });
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
@@ -75,7 +71,7 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
         company_id: auth.companyId,
         email: parsed.email,
         role: parsed.role,
-        approval_limit: parsed.role === 'controller' ? parsed.approval_limit : 0,
+        approval_limit: parsed.role === ROLES.CONTROLLER ? parsed.approval_limit : 0,
         invited_by: auth.userId,
         token: token,
         expires_at: expiresAt
@@ -83,9 +79,7 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
       .select()
       .single();
 
-    if (insertError) {
-      return NextResponse.json({ error: 'An invite is already pending for this email.' }, { status: 400 });
-    }
+    if (insertError) return NextResponse.json({ error: 'An invite is already pending for this email.' }, { status: 400 });
 
     const host = req.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';

@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { rpName, getRpId, getOrigin, uint8ArrayToBase64 } from '@/lib/webauthn';
 import { withAuth } from '@/lib/api-auth';
+import { ROLES } from '@/lib/roles';
 
-// Allow both CFOs and Controllers
-export const POST = withAuth(['cfo', 'controller'], async (req, ctx, auth) => {
+export const POST = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, auth) => {
   const body = await req.json();
 
   const { data: challengeData, error: fetchError } = await auth.supabase

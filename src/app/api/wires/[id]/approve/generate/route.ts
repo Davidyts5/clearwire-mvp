@@ -2,15 +2,14 @@ import { NextResponse } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { getRpId } from '@/lib/webauthn';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
+import { ROLES } from '@/lib/roles';
 
-// Both Controllers and CFOs can generate passkey challenges
-export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth) => {
+export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-  // 1. DYNAMIC POLICY ENGINE: Verify Approval Limits
   const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
   
-  if (auth.role === 'controller') {
+  if (auth.role === ROLES.CONTROLLER) {
     const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
     const controllerLimit = userData?.approval_limit || 0;
     if (wireData.amount > controllerLimit) {
@@ -47,9 +46,7 @@ export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth
     expires_at: new Date(Date.now() + 5 * 60000).toISOString()
   }]);
 
-  if (insertError) {
-    return NextResponse.json({ error: 'Database missing webauthn_challenges table.' }, { status: 500 });
-  }
+  if (insertError) return NextResponse.json({ error: 'Database missing webauthn_challenges table.' }, { status: 500 });
 
   return NextResponse.json(options);
 });

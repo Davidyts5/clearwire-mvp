@@ -1,27 +1,29 @@
 import { NextResponse } from 'next/server';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
+import { ROLES, ROLE_VALUES, Permissions } from '@/lib/roles';
 
-export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (req, { params }, auth) => {
+export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-  const { data, error } = await auth.supabase
-    .from('wire_requests')
-    .select('*')
-    .eq('id', params.id)
-    .single();
-
-  if (error) return NextResponse.json({ error: 'Wire not found' }, { status: 404 });
+  // STRICT CLERK REQUIREMENT: Clerks can only view their own wires
+  let query = auth.supabase.from('wire_requests').select('*').eq('id', params.id);
+  if (auth.role === ROLES.CLERK) {
+    query = query.eq('clerk_id', auth.userId);
+  }
+  
+  const { data, error } = await query.single();
+  if (error || !data) return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
   
   const headers = new Headers();
   headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   headers.set('Pragma', 'no-cache');
   headers.set('Expires', '0');
 
-  // DYNAMIC POLICY ENGINE: Check if controller is authorized based on THEIR SPECIFIC limit
-  const isCFO = auth.role === 'cfo';
+  // Verify Controller Limits dynamically
+  const isCFO = auth.role === ROLES.CFO;
   let isControllerAuthorized = false;
 
-  if (auth.role === 'controller') {
+  if (auth.role === ROLES.CONTROLLER) {
     const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
     const controllerLimit = userData?.approval_limit || 0;
     isControllerAuthorized = data.amount <= controllerLimit;
@@ -30,18 +32,17 @@ export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (re
   const canApprove = isCFO || isControllerAuthorized;
 
   return NextResponse.json(
-    { success: true, data, isCFO: canApprove },
+    { success: true, data, canApprove },
     { status: 200, headers }
   );
 });
 
-export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth) => {
+export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   const wire = await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-  // DYNAMIC POLICY ENGINE: Verify limits for state transitions
   const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
   
-  if (auth.role === 'controller') {
+  if (auth.role === ROLES.CONTROLLER) {
     const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
     const controllerLimit = userData?.approval_limit || 0;
     if (wireData.amount > controllerLimit) {
@@ -80,7 +81,6 @@ export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth
 
     return NextResponse.json({ success: true, data: updatedWire });
   } catch (error: any) {
-    console.error("State Transition Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 });

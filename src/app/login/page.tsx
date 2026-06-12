@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ShieldCheck, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase"; 
+import { ROLES, Permissions } from "@/lib/roles";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -26,7 +27,6 @@ export default function Login() {
       if (error) throw error;
 
       if (data.session) {
-        // FIX: Check if there is a 'next' redirect parameter in the URL (e.g., from an SMS link)
         const params = new URLSearchParams(window.location.search);
         const nextUrl = params.get('next');
 
@@ -35,18 +35,13 @@ export default function Login() {
           return;
         }
 
-        // Standard routing
         const { data: userData } = await supabase
           .from('users')
           .select('role')
           .eq('id', data.session.user.id)
           .single();
 
-        if (userData?.role === 'cfo') {
-          window.location.href = '/cfo-portal';
-        } else {
-          window.location.href = '/dashboard';
-        }
+        window.location.href = Permissions.getPortalRoute(userData?.role);
       }
     } catch (err: any) {
       setError(err.message || "Failed to sign in");
@@ -79,7 +74,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  placeholder="cfo@yourcompany.com"
+                  placeholder="ap@yourcompany.com"
                 />
               </div>
             </div>

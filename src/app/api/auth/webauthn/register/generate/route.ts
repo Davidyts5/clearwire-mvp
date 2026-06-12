@@ -3,9 +3,9 @@ import { generateRegistrationOptions } from '@simplewebauthn/server';
 import { rpName, getRpId } from '@/lib/webauthn';
 import { withAuth } from '@/lib/api-auth';
 import { isoUint8Array } from '@simplewebauthn/server/helpers';
+import { ROLES } from '@/lib/roles';
 
-// Allow both CFOs and Controllers to register hardware authenticators
-export const GET = withAuth(['cfo', 'controller'], async (req, ctx, auth) => {
+export const GET = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, auth) => {
   const { data: authenticators, error: fetchError } = await auth.supabase
     .from('user_authenticators')
     .select('credential_id')

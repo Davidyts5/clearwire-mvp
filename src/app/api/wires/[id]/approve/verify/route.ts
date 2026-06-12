@@ -3,15 +3,14 @@ import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { getRpId, getOrigin, base64ToUint8Array } from '@/lib/webauthn';
 import crypto from 'crypto';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
+import { ROLES } from '@/lib/roles';
 
-// Both Controllers and CFOs can verify passkey challenges
-export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth) => {
+export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-  // DYNAMIC POLICY ENGINE: Verify Limits
   const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
   
-  if (auth.role === 'controller') {
+  if (auth.role === ROLES.CONTROLLER) {
     const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
     const controllerLimit = userData?.approval_limit || 0;
     if (wireData.amount > controllerLimit) {
@@ -64,15 +63,8 @@ export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth
         updatedCounter = verification.authenticationInfo.newCounter;
       }
 
-      await auth.supabase
-        .from('user_authenticators')
-        .update({ counter: updatedCounter })
-        .eq('id', authenticator.id);
-        
-      await auth.supabase
-        .from('webauthn_challenges')
-        .delete()
-        .eq('id', challengeData.id);
+      await auth.supabase.from('user_authenticators').update({ counter: updatedCounter }).eq('id', authenticator.id);
+      await auth.supabase.from('webauthn_challenges').delete().eq('id', challengeData.id);
 
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature || 'fallback_hash').digest('hex');
 
@@ -100,10 +92,8 @@ export const POST = withAuth(['controller', 'cfo'], async (req, { params }, auth
 
       return NextResponse.json({ success: true, data: updatedWire });
     }
-
     return NextResponse.json({ error: 'Cryptographic Verification Failed' }, { status: 400 });
   } catch (error: any) {
-    console.error("Authentication Verification Error:", error);
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 });

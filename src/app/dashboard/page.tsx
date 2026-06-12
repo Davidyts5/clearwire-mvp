@@ -3,13 +3,15 @@
 import { useState, useEffect } from "react";
 import { Plus, ShieldAlert, CheckCircle2, Clock, FileText, Loader2, ExternalLink, XCircle } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { ROLES, Permissions } from "@/lib/roles";
 
 type WireRequest = {
   id: string;
-  vendor_name: string;
+  vendor_name_snapshot: string;
   amount: number;
   purpose: string;
-  status: "pending" | "approved" | "denied";
+  status: "pending" | "approved" | "denied" | "frozen" | "under_review";
   created_at: string;
 };
 
@@ -18,11 +20,19 @@ export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>("");
 
   useEffect(() => {
-    const fetchWires = async () => {
+    const fetchWiresAndRole = async () => {
       try {
-        const res = await fetch('/api/wires');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: userData } = await supabase.from('users').select('role').eq('id', session.user.id).single();
+          setUserRole(userData?.role || "");
+        }
+
+        const cacheBuster = new Date().getTime();
+        const res = await fetch(`/api/wires?t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         if (json.success) setRequests(json.data);
       } catch (err) {
@@ -31,7 +41,7 @@ export default function Dashboard() {
         setIsLoading(false);
       }
     };
-    fetchWires();
+    fetchWiresAndRole();
   }, []);
 
   const handleNewRequest = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -73,9 +83,11 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-slate-900">Accounts Payable Dashboard</h1>
           <p className="text-slate-500 text-sm mt-1">Manage outbound wires and cryptographically verify approvals.</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-colors">
-          <Plus size={18} /> New Wire Request
-        </button>
+        {userRole === ROLES.CLERK && (
+          <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-colors">
+            <Plus size={18} /> New Wire Request
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -101,16 +113,18 @@ export default function Dashboard() {
                       {req.id.substring(0, 8)}... <ExternalLink size={12} />
                     </Link>
                   </td>
-                  <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name}</td>
-                  <td className="px-6 py-4 text-slate-900">${Number(req.amount).toLocaleString()}</td>
+                  <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name_snapshot}</td>
+                  <td className="px-6 py-4 text-slate-900 font-semibold">${Number(req.amount).toLocaleString()}</td>
                   <td className="px-6 py-4 text-slate-500 truncate max-w-[150px]">{req.purpose || '-'}</td>
                   <td className="px-6 py-4">
                     {req.status === "approved" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200"><CheckCircle2 size={14} /> Approved</span>}
                     {req.status === "denied" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><XCircle size={14} /> Denied</span>}
                     {req.status === "pending" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={14} /> Pending</span>}
+                    {req.status === "frozen" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><AlertTriangle size={14} /> Frozen</span>}
+                    {req.status === "under_review" && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"><Clock size={14} /> Under Review</span>}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    {req.status !== "pending" ? (
+                    {req.status !== "pending" && req.status !== "frozen" && req.status !== "under_review" ? (
                       <a href={`/api/pdf/${req.id}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 text-sm font-medium">
                         <FileText size={16} /> PDF
                       </a>
@@ -123,7 +137,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {isModalOpen && (
+      {isModalOpen && userRole === ROLES.CLERK && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="p-6 border-b border-slate-100">

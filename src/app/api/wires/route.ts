@@ -3,6 +3,7 @@ import { z } from 'zod';
 import twilio from 'twilio';
 import { evaluateWireRisk } from '@/lib/risk-engine';
 import { withAuth } from '@/lib/api-auth';
+import { ROLES, ROLE_VALUES } from '@/lib/roles';
 
 const WireSchema = z.object({
   vendor: z.string().min(1, "Vendor name is required"),
@@ -12,23 +13,31 @@ const WireSchema = z.object({
   bank_account_last_four: z.string().length(4).optional().or(z.literal(''))
 });
 
-export const GET = withAuth(['clerk', 'controller', 'cfo', 'auditor'], async (req, ctx, auth) => {
-  const { data, error } = await auth.supabase
+// All authenticated roles can fetch wires, but the query is scoped based on role
+export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
+  let query = auth.supabase
     .from('wire_requests')
     .select('*')
     .eq('company_id', auth.companyId)
     .order('created_at', { ascending: false });
 
+  // STRICT REQUIREMENT: Clerks can ONLY view their OWN wire requests
+  if (auth.role === ROLES.CLERK) {
+    query = query.eq('clerk_id', auth.userId);
+  }
+
+  const { data, error } = await query;
+
   if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 });
   return NextResponse.json({ success: true, data });
 });
 
-// FIX: Restrict wire creation strictly to AP Clerks (Segregation of Duties)
-export const POST = withAuth(['clerk'], async (req, ctx, auth) => {
+// STRICT REQUIREMENT: Only Clerks can create wire requests
+export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
   try {
     const body = await req.json();
-    
     const validationResult = WireSchema.safeParse(body);
+    
     if (!validationResult.success) {
       const errorMessage = validationResult.error.issues.map(i => `${i.path[0]}: ${i.message}`).join(', ');
       return NextResponse.json({ error: `Validation Error - ${errorMessage}` }, { status: 400 });
@@ -36,7 +45,7 @@ export const POST = withAuth(['clerk'], async (req, ctx, auth) => {
     
     const parsed = validationResult.data;
 
-    const { data: vendorData, error: vendorFetchError } = await auth.supabase
+    const { data: vendorData } = await auth.supabase
       .from('vendors')
       .select('id, account_last_four')
       .eq('name', parsed.vendor)
@@ -52,9 +61,7 @@ export const POST = withAuth(['clerk'], async (req, ctx, auth) => {
         account_last_four: parsed.bank_account_last_four || null
       }]).select().single();
       
-      if (vendorInsertError) {
-        return NextResponse.json({ error: `Database missing vendors table. Please run the sync script.` }, { status: 500 });
-      }
+      if (vendorInsertError) return NextResponse.json({ error: `Database missing vendors table.` }, { status: 500 });
       finalVendorId = newVendor?.id;
     }
 
@@ -85,10 +92,7 @@ export const POST = withAuth(['clerk'], async (req, ctx, auth) => {
       anti_ai_phrase: antiAiPhrase 
     }]).select().single();
 
-    if (dbError) {
-      console.error("Wire Request Insert Error:", dbError);
-      return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
-    }
+    if (dbError) return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
 
     await auth.supabase.from('audit_logs').insert([{
       company_id: auth.companyId,
@@ -114,7 +118,6 @@ export const POST = withAuth(['clerk'], async (req, ctx, auth) => {
 
     return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });
   } catch (error: any) {
-    console.error("Route catch block:", error);
     return NextResponse.json({ error: 'Server error parsing request' }, { status: 500 });
   }
 });

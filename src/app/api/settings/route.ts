@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withAuth } from '@/lib/api-auth';
+import { ROLES } from '@/lib/roles';
 
 const SettingsSchema = z.object({
   controller_limit: z.number().min(0, "Limit cannot be negative")
 });
 
-export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
+export const GET = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
     let { data, error } = await auth.supabase
       .from('company_settings')
@@ -41,7 +42,7 @@ export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
   }
 });
 
-export const PUT = withAuth(['cfo'], async (req, ctx, auth) => {
+export const PUT = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
     const body = await req.json();
     const parsed = SettingsSchema.parse(body);
@@ -61,7 +62,6 @@ export const PUT = withAuth(['cfo'], async (req, ctx, auth) => {
       .single();
 
     if (error) throw error;
-
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
