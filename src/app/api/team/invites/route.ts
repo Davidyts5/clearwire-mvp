@@ -8,15 +8,27 @@ const InviteSchema = z.object({
   role: z.enum(['clerk', 'controller', 'cfo', 'auditor'])
 });
 
+async function getAdminClient() {
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SERVICE_ROLE_KEY");
+  return createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
 export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
   try {
-    const { data: teamMembers, error: usersError } = await auth.supabase
+    // 1. Because the CFO is already authenticated and verified by 'withAuth',
+    // we can safely use the Admin client to fetch the team roster.
+    // This securely bypasses the restrictive RLS policy on the users table 
+    // that prevents them from seeing anyone except themselves.
+    const supabaseAdmin = await getAdminClient();
+
+    const { data: teamMembers, error: usersError } = await supabaseAdmin
       .from('users')
       .select('id, email, full_name, role, created_at')
-      .eq('company_id', auth.companyId)
+      .eq('company_id', auth.companyId) // Critically scoped to their company only
       .order('created_at', { ascending: true });
 
-    const { data: pendingInvites, error: invitesError } = await auth.supabase
+    const { data: pendingInvites, error: invitesError } = await supabaseAdmin
       .from('team_invites')
       .select('id, email, role, status, expires_at, created_at')
       .eq('company_id', auth.companyId)
@@ -25,7 +37,7 @@ export const GET = withAuth(['cfo'], async (req, ctx, auth) => {
 
     if (usersError || invitesError) throw new Error("Database fetch failed");
 
-    // FIX: Force dynamic data fetch, explicitly bypassing Next.js cache
+    // Force dynamic fetch
     const headers = new Headers();
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     headers.set('Pragma', 'no-cache');
@@ -45,7 +57,9 @@ export const POST = withAuth(['cfo'], async (req, ctx, auth) => {
     const body = await req.json();
     const parsed = InviteSchema.parse(body);
 
-    const { data: existingUser } = await auth.supabase
+    const supabaseAdmin = await getAdminClient();
+
+    const { data: existingUser } = await supabaseAdmin
       .from('users')
       .select('id')
       .eq('company_id', auth.companyId)

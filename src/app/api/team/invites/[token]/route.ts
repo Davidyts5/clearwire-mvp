@@ -7,11 +7,20 @@ const AcceptInviteSchema = z.object({
   fullName: z.string().min(2, "Full name is required")
 });
 
+// Helper to safely get the Admin client to bypass RLS
+async function getAdminClient() {
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SERVICE_ROLE_KEY");
+  return createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   try {
-    const supabase = createClient();
+    // 1. MUST use Admin client here because the user clicking the link is NOT logged in yet.
+    // Standard RLS would block this read.
+    const supabaseAdmin = await getAdminClient();
     
-    const { data: invite, error } = await supabase
+    const { data: invite, error } = await supabaseAdmin
       .from('team_invites')
       .select('email, role, company_id, status, expires_at, companies(name)')
       .eq('token', params.token)
@@ -29,6 +38,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       return NextResponse.json({ error: 'Invite link has expired' }, { status: 400 });
     }
 
+    // Pass data safely to the frontend
     return NextResponse.json({ 
       success: true, 
       data: {
@@ -38,7 +48,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       } 
     });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Server error parsing token' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Server error parsing token' }, { status: 500 });
   }
 }
 
@@ -47,10 +57,10 @@ export async function POST(req: Request, { params }: { params: { token: string }
     const body = await req.json();
     const parsed = AcceptInviteSchema.parse(body);
 
-    const supabase = createClient();
+    const supabaseAdmin = await getAdminClient();
 
     // 1. Validate Invite
-    const { data: invite, error: inviteError } = await supabase
+    const { data: invite, error: inviteError } = await supabaseAdmin
       .from('team_invites')
       .select('*')
       .eq('token', params.token)
@@ -59,7 +69,8 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
     if (inviteError || !invite) return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 });
 
-    // 2. Create User in Auth
+    // 2. Create User in Auth using standard client so the session is generated
+    const supabase = createClient();
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: invite.email,
       password: parsed.password,
@@ -69,8 +80,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
       return NextResponse.json({ error: authError?.message || 'Failed to create secure account' }, { status: 400 });
     }
 
-    // 3. To completely bypass the RLS insert block on public.users without needing the Service Role Key, 
-    // we use a securely invoked PostgreSQL RPC (Stored Procedure) that runs with SECURITY DEFINER.
+    // 3. Provision User bypassing RLS via RPC
     const { error: dbError } = await supabase.rpc('provision_invited_user', {
       p_user_id: authData.user.id,
       p_company_id: invite.company_id,
@@ -81,21 +91,12 @@ export async function POST(req: Request, { params }: { params: { token: string }
     });
 
     if (dbError) {
-      console.error("RPC Provisioning Error:", dbError);
-      
-      // Cleanup the orphaned auth user
-      const { createClient: createAdminClient } = await import('@supabase/supabase-js');
-      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-         const adminClient = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
-         await adminClient.auth.admin.deleteUser(authData.user.id);
-      }
-
-      return NextResponse.json({ error: `Provisioning RPC Failed: ${dbError.message}` }, { status: 500 });
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      return NextResponse.json({ error: `Provisioning Failed: ${dbError.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error("Invite Accept Catch Error:", error);
     return NextResponse.json({ error: error.message || 'Server error accepting invite' }, { status: 500 });
   }
 }
