@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { withAuth } from '@/lib/api-auth';
+import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 
 const InviteSchema = z.object({
@@ -9,12 +9,6 @@ const InviteSchema = z.object({
   role: z.enum([ROLES.CLERK, ROLES.CONTROLLER, ROLES.CFO, ROLES.AUDITOR]),
   approval_limit: z.number().min(0).optional().default(0)
 });
-
-async function getAdminClient() {
-  const { createClient: createAdmin } = await import('@supabase/supabase-js');
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SERVICE_ROLE_KEY");
-  return createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
 
 export const GET = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
@@ -37,8 +31,6 @@ export const GET = withAuth([ROLES.CFO], async (req, ctx, auth) => {
 
     const headers = new Headers();
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    headers.set('Pragma', 'no-cache');
-    headers.set('Expires', '0');
 
     return NextResponse.json({ success: true, data: { teamMembers, pendingInvites } }, { status: 200, headers });
   } catch (error: any) {

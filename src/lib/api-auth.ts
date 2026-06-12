@@ -9,7 +9,6 @@ export type AuthContext = {
   supabase: any; 
 };
 
-// Returns an Admin client with Service Role privileges. Must be used with extreme caution.
 export async function getAdminClient() {
   const { createClient: createAdmin } = await import('@supabase/supabase-js');
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SERVICE_ROLE_KEY");
