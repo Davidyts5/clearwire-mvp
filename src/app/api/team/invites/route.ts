@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { withAuth, getAdminClient } from '@/lib/api-auth';
+import { withAuth } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 
 const InviteSchema = z.object({
@@ -12,22 +12,22 @@ const InviteSchema = z.object({
 
 export const GET = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
-    const supabaseAdmin = await getAdminClient();
-
-    const { data: teamMembers, error: usersError } = await supabaseAdmin
+    // Because the new auth_user_company_id() RLS function completely eliminated the recursion bug,
+    // we no longer need the dangerous Admin Client here! Standard authenticated client works perfectly.
+    const { data: teamMembers, error: usersError } = await auth.supabase
       .from('users')
       .select('id, email, full_name, role, approval_limit, created_at')
       .eq('company_id', auth.companyId)
       .order('created_at', { ascending: true });
 
-    const { data: pendingInvites, error: invitesError } = await supabaseAdmin
+    const { data: pendingInvites, error: invitesError } = await auth.supabase
       .from('team_invites')
       .select('id, email, role, approval_limit, status, expires_at, created_at')
       .eq('company_id', auth.companyId)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
-    if (usersError || invitesError) throw new Error("Database fetch failed");
+    if (usersError || invitesError) throw new Error("Database fetch failed due to RLS or missing tables.");
 
     const headers = new Headers();
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -43,9 +43,7 @@ export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
     const body = await req.json();
     const parsed = InviteSchema.parse(body);
 
-    const supabaseAdmin = await getAdminClient();
-
-    const { data: existingUser } = await supabaseAdmin
+    const { data: existingUser } = await auth.supabase
       .from('users')
       .select('id')
       .eq('company_id', auth.companyId)
@@ -72,6 +70,15 @@ export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
       .single();
 
     if (insertError) return NextResponse.json({ error: 'An invite is already pending for this email.' }, { status: 400 });
+
+    // WORM Audit Logging: Invite Creation
+    await auth.supabase.from('audit_logs').insert([{
+      company_id: auth.companyId,
+      wire_id: '00000000-0000-0000-0000-000000000000', // System wire ID for non-wire events
+      actor_id: auth.userId,
+      action: `INVITE_CREATED_FOR_${parsed.role.toUpperCase()}`,
+      new_hash: token
+    }]);
 
     const host = req.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';

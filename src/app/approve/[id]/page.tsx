@@ -52,8 +52,8 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         }
 
         setStatus(json.data.status);
-      } catch (err) {
-        setErrorMsg("Failed to connect to secure server.");
+      } catch (err: any) {
+        setErrorMsg(err.message || "Failed to connect to secure server.");
         setStatus("error");
       }
     };
