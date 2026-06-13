@@ -11,6 +11,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   const [status, setStatus] = useState<string>("loading");
   const [wireDetails, setWireDetails] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string>("Invalid Wire Request.");
 
   useEffect(() => {
     const fetchWireAndVerifyRole = async () => {
@@ -19,7 +20,11 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         const res = await fetch(`/api/wires/${params.id}?t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         
-        if (!json.success) return setStatus("error");
+        if (!json.success) {
+          setErrorMsg(json.error || "Wire request not found or access denied.");
+          return setStatus("error");
+        }
+        
         setWireDetails(json.data);
 
         if (!json.canApprove) return setStatus("unauthorized");
@@ -48,6 +53,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
         setStatus(json.data.status);
       } catch (err) {
+        setErrorMsg("Failed to connect to secure server.");
         setStatus("error");
       }
     };
@@ -65,7 +71,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         body: JSON.stringify({ action })
       });
       const json = await res.json();
-      if (res.status === 400 || res.status === 403) throw new Error(json.error);
+      if (!res.ok) throw new Error(json.error || "Server rejected action");
       if (json.success) setStatus(json.data.status);
     } catch (err: any) {
       alert(err.message || "Failed to update state.");
@@ -78,7 +84,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
     try {
       const resOptions = await fetch(`/api/wires/${params.id}/approve/generate`, { method: 'POST' });
       const options = await resOptions.json();
-      if (options.error) throw new Error(options.error);
+      if (!resOptions.ok) throw new Error(options.error || "Failed to generate passkey challenge");
 
       const authResp = await startAuthentication(options);
 
@@ -103,7 +109,15 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   };
 
   if (status === "loading") return <div className="text-center mt-20 text-slate-500 font-medium animate-pulse">Establishing Secure Connection...</div>;
-  if (status === "error" || !wireDetails) return <div className="text-center mt-20 text-red-500 font-medium">Invalid Wire Request.</div>;
+  
+  if (status === "error") return (
+    <div className="text-center mt-20 text-red-500 font-medium max-w-md mx-auto p-6 bg-red-50 rounded-xl border border-red-200">
+      <ShieldCheck size={48} className="mx-auto text-red-400 mb-3" />
+      <p className="text-lg font-bold text-red-900 mb-1">Access Blocked</p>
+      <p className="text-sm text-red-700">{errorMsg}</p>
+      <Link href={Permissions.getPortalRoute(userRole as any)} className="mt-4 inline-block text-blue-600 font-medium hover:underline text-sm">Return to Dashboard</Link>
+    </div>
+  );
   
   if (status === "unauthorized") {
     return (
