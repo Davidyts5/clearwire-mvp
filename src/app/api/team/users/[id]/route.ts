@@ -19,11 +19,16 @@ export const PUT = withAuth([ROLES.CFO], async (req, { params }, auth) => {
       .update({ approval_limit: parsed.approval_limit })
       .eq('id', params.id)
       .eq('company_id', auth.companyId)
-      .select()
-      .single();
+      .select(); // REMOVED .single() WHICH CAUSES THE JSON COERCION ERROR
 
     if (error) throw error;
-    return NextResponse.json({ success: true, data });
+    
+    // Check if the array actually contains the updated user
+    if (!data || data.length === 0) {
+      throw new Error("Update failed or user not found");
+    }
+
+    return NextResponse.json({ success: true, data: data[0] });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to update limit' }, { status: 500 });
   }
