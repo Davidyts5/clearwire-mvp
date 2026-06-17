@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Plus, ShieldAlert, CheckCircle2, Clock, FileText, Loader2, ExternalLink, XCircle, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase";
 
 export default function ClerkDashboard() {
   const [requests, setRequests] = useState<any[]>([]);

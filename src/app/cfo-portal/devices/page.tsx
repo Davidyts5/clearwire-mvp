@@ -13,18 +13,12 @@ export default function RegisterDevice() {
     setErrorMsg("");
 
     try {
-      // 1. Get Challenge Options from Server
       const resOptions = await fetch("/api/auth/webauthn/register/generate");
       const options = await resOptions.json();
-      if (options.error) throw new Error(options.error);
+      if (!resOptions.ok || options.error) throw new Error(options.error || "Failed to generate options");
 
-      // Note: @simplewebauthn/browser v9 automatically handles the conversion 
-      // of the Base64URL encoded userID back to a Uint8Array.
-
-      // 2. Trigger Biometric Hardware
       const attResp = await startRegistration(options);
 
-      // 3. Send Payload back to Server to Verify and Store Public Key
       const resVerify = await fetch("/api/auth/webauthn/register/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

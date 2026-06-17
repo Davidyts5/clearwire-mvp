@@ -2,12 +2,13 @@
 import { useState, useEffect } from "react";
 import { ShieldCheck, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 
 export default function ControllerDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [limit, setLimit] = useState(0);
+  const supabase = createClient();
 
   useEffect(() => {
     const fetchWiresAndContext = async () => {

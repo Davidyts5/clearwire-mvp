@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { startAuthentication } from "@simplewebauthn/browser";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 import { ROLES, Permissions } from "@/lib/roles";
 
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
@@ -29,6 +29,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
         if (!json.canApprove) return setStatus("unauthorized");
 
+        const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return setStatus("unauthorized");
 

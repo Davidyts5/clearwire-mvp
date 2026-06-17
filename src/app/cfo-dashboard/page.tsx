@@ -1,11 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
-import { ShieldCheck, Loader2, ExternalLink, CheckCircle2, Clock, XCircle, Users, Settings } from "lucide-react";
+import { ShieldCheck, Loader2, ExternalLink, Users, Settings } from "lucide-react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase";
 
 export default function CFODashboard() {
   const [requests, setRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const supabase = createClient();
 
   useEffect(() => {
     const fetchWires = async () => {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ShieldCheck, Users, Mail, UserPlus, Loader2, Copy, Check, Pencil } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 export default function TeamManagement() {
   const [team, setTeam] = useState<any[]>([]);
@@ -89,16 +90,21 @@ export default function TeamManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approval_limit: Number(editLimit) })
       });
+      
       const json = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(json.error || "Server rejected update");
+      }
       
       if (json.success) {
         setEditingUser(null);
         fetchTeam(); 
       } else {
-        alert(json.error);
+        throw new Error(json.error || "Update failed silently");
       }
-    } catch (err) {
-      alert("Failed to update limit");
+    } catch (err: any) {
+      alert(err.message || "Failed to update limit");
     } finally {
       setIsSavingLimit(false);
     }
@@ -119,7 +125,7 @@ export default function TeamManagement() {
             <p className="text-slate-400 text-sm">Control access and user-specific approval limits</p>
           </div>
         </div>
-        <Link href="/cfo-portal" className="text-sm font-medium text-slate-300 hover:text-white underline">
+        <Link href="/cfo-dashboard" className="text-sm font-medium text-slate-300 hover:text-white underline">
           &larr; Back to Portal
         </Link>
       </div>
@@ -140,6 +146,7 @@ export default function TeamManagement() {
                 <option value="clerk">AP Clerk (Can draft wires)</option>
                 <option value="controller">Controller (Can approve up to limit)</option>
                 <option value="cfo">CFO / Executive (Full Multi-Sig)</option>
+                <option value="auditor">Auditor (Read Only)</option>
               </select>
             </div>
             
@@ -220,7 +227,6 @@ export default function TeamManagement() {
         </div>
       </div>
 
-      {/* Edit Limit Modal */}
       {editingUser && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
