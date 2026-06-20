@@ -7,8 +7,6 @@ import { ROLES } from '@/lib/roles';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
-  
-  // SECURITY FIX: Enforce Segregation of Duties (SoD)
   await verifySegregationOfDuties(auth.supabase, params.id, auth.userId);
 
   const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
@@ -71,7 +69,10 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature || 'fallback_hash').digest('hex');
 
-      // SECURITY FIX: Execute state transition using the secured Admin RPC
+      // 3. ATOMIC STATE MACHINE (Race Condition Fix)
+      // Calls the newly restored Stored Procedure that executes SELECT FOR UPDATE.
+      // This mathematically guarantees that if two CFOs approve simultaneously,
+      // Postgres locks the row, queues them, and throws an exception on the second attempt.
       const adminClient = await getAdminClient();
       const { data: updatedWire, error: rpcError } = await adminClient.rpc('transition_wire_state', {
         p_wire_id: params.id,

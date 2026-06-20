@@ -4,8 +4,6 @@ import { ROLES, ROLE_VALUES } from '@/lib/roles';
 
 export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   try {
-    // 1. We must await the defense-in-depth check.
-    // If verifyTenantResource throws, it hits the catch block.
     await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
     let query = auth.supabase.from('wire_requests').select('*').eq('id', params.id);
@@ -38,7 +36,6 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
     );
   } catch (error: any) {
     console.error("GET Wire Error:", error);
-    // Return structured JSON error rather than crashing or returning HTML
     return NextResponse.json({ success: false, error: error.message }, { status: 404 });
   }
 });
@@ -65,6 +62,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
     else if (action === 'review') newStatus = 'under_review';
     else return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 
+    // ATOMIC STATE MACHINE FIX
     const adminClient = await getAdminClient();
     const { data: updatedWire, error: rpcError } = await adminClient.rpc('transition_wire_state', {
       p_wire_id: params.id,

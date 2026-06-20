@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { withAuth } from '@/lib/api-auth';
+import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 
 const InviteSchema = z.object({
@@ -12,8 +12,6 @@ const InviteSchema = z.object({
 
 export const GET = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
-    // Because the new auth_user_company_id() RLS function completely eliminated the recursion bug,
-    // we no longer need the dangerous Admin Client here! Standard authenticated client works perfectly.
     const { data: teamMembers, error: usersError } = await auth.supabase
       .from('users')
       .select('id, email, full_name, role, approval_limit, created_at')
@@ -71,18 +69,17 @@ export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
 
     if (insertError) return NextResponse.json({ error: 'An invite is already pending for this email.' }, { status: 400 });
 
-    // WORM Audit Logging: Invite Creation
     await auth.supabase.from('audit_logs').insert([{
       company_id: auth.companyId,
-      wire_id: '00000000-0000-0000-0000-000000000000', // System wire ID for non-wire events
+      wire_id: '00000000-0000-0000-0000-000000000000', 
       actor_id: auth.userId,
       action: `INVITE_CREATED_FOR_${parsed.role.toUpperCase()}`,
       new_hash: token
     }]);
 
-    const host = req.headers.get('host') || 'localhost:3000';
-    const protocol = host.includes('localhost') ? 'http' : 'https';
-    const magicLink = `${protocol}://${host}/invite/${token}`;
+    // HOST-HEADER INJECTION FIX
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const magicLink = `${siteUrl}/invite/${token}`;
 
     return NextResponse.json({ success: true, data: invite, magicLink });
   } catch (error: any) {
