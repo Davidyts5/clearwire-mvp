@@ -35,7 +35,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
         const { data: userData } = await supabase
           .from('users')
-          .select('role, approval_limit')
+          .select('role, approval_limit, can_unfreeze')
           .eq('id', session.user.id)
           .single();
 
@@ -50,6 +50,10 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
           const limit = Number(userData.approval_limit || 0);
           const amount = Number(json.data.amount);
           if (amount > limit) return setStatus("unauthorized");
+
+          if (json.data.status === 'frozen' && !userData.can_unfreeze) {
+             return setStatus("unauthorized");
+          }
         }
 
         setStatus(json.data.status);
@@ -128,7 +132,8 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         </div>
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
         <p className="text-slate-500 mb-6">
-          Your account role or approval limit does not authorize you to cryptographically sign this wire transfer.
+          Your account role or approval limit does not authorize you to cryptographically sign this wire transfer. 
+          {wireDetails?.status === 'frozen' ? " This transaction is currently FROZEN and requires delegated CFO unfreeze authority." : ""}
         </p>
         <Link href={Permissions.getPortalRoute(userRole as any)} className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
       </div>
@@ -158,6 +163,14 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
     );
   }
 
+  // Parse risk reasons safely
+  let riskReasons: string[] = [];
+  try {
+    if (wireDetails.risk_reasons) {
+      riskReasons = JSON.parse(wireDetails.risk_reasons);
+    }
+  } catch (e) {}
+
   return (
     <div className="max-w-md mx-auto mt-6 bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
       <div className="bg-slate-900 text-white p-6 text-center relative">
@@ -172,6 +185,10 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
             <span className="font-semibold text-slate-900">{wireDetails.vendor_name_snapshot}</span>
           </div>
           <div className="flex justify-between items-end border-b border-slate-100 pb-3">
+            <span className="text-sm text-slate-500">Bank Account</span>
+            <span className="font-mono text-slate-900 text-sm">*{wireDetails.account_number_snapshot?.slice(-4) || 'N/A'}</span>
+          </div>
+          <div className="flex justify-between items-end border-b border-slate-100 pb-3">
             <span className="text-sm text-slate-500">Amount</span>
             <span className="text-2xl font-bold text-slate-900">${Number(wireDetails.amount).toLocaleString()}</span>
           </div>
@@ -179,8 +196,13 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
         {wireDetails.risk_score >= 90 && status === 'frozen' && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
-            <AlertTriangle className="inline mr-2" size={16} />
-            <strong>Risk Engine Freeze.</strong> Score: {wireDetails.risk_score}/100. Must be placed under review before approval.
+            <AlertTriangle className="inline mr-2 text-red-600" size={16} />
+            <strong className="text-red-900">Risk Engine Freeze (Score: {wireDetails.risk_score}/100)</strong>
+            <ul className="mt-2 list-disc list-inside pl-1">
+              {riskReasons.map((reason, idx) => (
+                <li key={idx}>{reason}</li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -203,7 +225,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
           )}
 
           <button onClick={() => handleAction('decline')} className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-xl py-3 border border-red-200 flex items-center justify-center gap-2">
-            <XCircle size={18} /> Decline & Flag
+            <XCircle size={18} /> Decline & Flag Fraud
           </button>
         </div>
       </div>

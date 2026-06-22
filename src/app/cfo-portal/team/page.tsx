@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldCheck, Users, Mail, UserPlus, Loader2, Copy, Check, Pencil } from "lucide-react";
+import { ShieldCheck, Users, Mail, UserPlus, Loader2, Copy, Check, Pencil, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 
 export default function TeamManagement() {
   const [team, setTeam] = useState<any[]>([]);
@@ -13,6 +12,7 @@ export default function TeamManagement() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("clerk");
   const [approvalLimit, setApprovalLimit] = useState(10000);
+  const [canUnfreeze, setCanUnfreeze] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [magicLink, setMagicLink] = useState("");
   const [copied, setCopied] = useState(false);
@@ -20,26 +20,20 @@ export default function TeamManagement() {
   // Edit Modal State
   const [editingUser, setEditingUser] = useState<any>(null);
   const [editLimit, setEditLimit] = useState(0);
+  const [editCanUnfreeze, setEditCanUnfreeze] = useState(false);
   const [isSavingLimit, setIsSavingLimit] = useState(false);
 
-  useEffect(() => {
-    fetchTeam();
-  }, []);
+  useEffect(() => { fetchTeam(); }, []);
 
   const fetchTeam = async () => {
     try {
-      const cacheBuster = new Date().getTime();
-      const res = await fetch(`/api/team/invites?t=${cacheBuster}`, { cache: 'no-store' });
+      const res = await fetch(`/api/team/invites?t=${new Date().getTime()}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         setTeam(json.data.teamMembers);
         setInvites(json.data.pendingInvites);
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (err) { console.error(err); } finally { setIsLoading(false); }
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -54,23 +48,17 @@ export default function TeamManagement() {
         body: JSON.stringify({ 
           email, 
           role,
-          approval_limit: role === 'controller' ? approvalLimit : 0
+          approval_limit: role === 'controller' ? approvalLimit : 0,
+          can_unfreeze: role === 'controller' ? canUnfreeze : false
         })
       });
       const json = await res.json();
-      
       if (json.success) {
         setMagicLink(json.magicLink);
         setEmail("");
         fetchTeam(); 
-      } else {
-        alert(json.error);
-      }
-    } catch (err) {
-      alert("Failed to send invite");
-    } finally {
-      setIsSubmitting(false);
-    }
+      } else alert(json.error);
+    } catch (err) { alert("Failed to send invite"); } finally { setIsSubmitting(false); }
   };
 
   const copyToClipboard = () => {
@@ -88,31 +76,24 @@ export default function TeamManagement() {
       const res = await fetch(`/api/team/users/${editingUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approval_limit: Number(editLimit) })
+        body: JSON.stringify({ 
+          approval_limit: Number(editLimit),
+          can_unfreeze: editCanUnfreeze
+        })
       });
-      
       const json = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(json.error || "Server rejected update");
-      }
-      
+      if (!res.ok) throw new Error(json.error || "Server rejected update");
       if (json.success) {
         setEditingUser(null);
         fetchTeam(); 
-      } else {
-        throw new Error(json.error || "Update failed silently");
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to update limit");
-    } finally {
-      setIsSavingLimit(false);
-    }
+      } else throw new Error(json.error || "Update failed silently");
+    } catch (err: any) { alert(err.message || "Failed to update limit"); } finally { setIsSavingLimit(false); }
   };
 
   const openEditModal = (user: any) => {
     setEditingUser(user);
     setEditLimit(user.approval_limit || 0);
+    setEditCanUnfreeze(user.can_unfreeze || false);
   };
 
   return (
@@ -138,11 +119,11 @@ export default function TeamManagement() {
           <form onSubmit={handleInvite} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
-              <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="employee@company.com" />
+              <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none text-sm" placeholder="employee@company.com" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Role / Permissions</label>
-              <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none text-sm">
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none text-sm">
                 <option value="clerk">AP Clerk (Can draft wires)</option>
                 <option value="controller">Controller (Can approve up to limit)</option>
                 <option value="cfo">CFO / Executive (Full Multi-Sig)</option>
@@ -151,27 +132,37 @@ export default function TeamManagement() {
             </div>
             
             {role === 'controller' && (
-              <div className="animate-in fade-in slide-in-from-top-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Max Approval Limit (USD)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-slate-500">$</span>
-                  <input required type="number" min="0" value={approvalLimit} onChange={(e) => setApprovalLimit(Number(e.target.value))} className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" />
+              <div className="animate-in fade-in slide-in-from-top-2 space-y-4 border-t border-slate-100 pt-4 mt-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Max Approval Limit (USD)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-slate-500">$</span>
+                    <input required type="number" min="0" value={approvalLimit} onChange={(e) => setApprovalLimit(Number(e.target.value))} className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-lg outline-none text-sm" />
+                  </div>
+                </div>
+                
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" checked={canUnfreeze} onChange={(e) => setCanUnfreeze(e.target.checked)} className="mt-1" />
+                    <div>
+                      <span className="text-sm font-bold text-red-900 block">Delegate Unfreeze Authority</span>
+                      <span className="text-xs text-red-700">Allow this controller to bypass the Risk Engine and unfreeze high-risk transactions (e.g. Bank Account changes).</span>
+                    </div>
+                  </label>
                 </div>
               </div>
             )}
 
-            <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg flex items-center justify-center gap-2 transition-colors">
-              {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
-              Send Secure Invite
+            <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg flex items-center justify-center gap-2">
+              {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />} Send Secure Invite
             </button>
           </form>
 
           {magicLink && (
             <div className="mt-6 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
               <p className="text-xs font-semibold text-emerald-800 mb-2">Invite Generated!</p>
-              <p className="text-xs text-emerald-600 mb-3">Copy the link below and send it to your staff member to set their password.</p>
               <div className="flex items-center gap-2">
-                <input readOnly value={magicLink} className="flex-1 bg-white border border-emerald-200 text-xs px-2 py-1.5 rounded outline-none text-slate-500" />
+                <input readOnly value={magicLink} className="flex-1 bg-white border border-emerald-200 text-xs px-2 py-1.5 rounded text-slate-500" />
                 <button onClick={copyToClipboard} className="bg-emerald-600 text-white p-1.5 rounded hover:bg-emerald-700">
                   {copied ? <Check size={14} /> : <Copy size={14} />}
                 </button>
@@ -188,11 +179,7 @@ export default function TeamManagement() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead className="bg-white border-b border-slate-100 text-slate-500">
-                  <tr>
-                    <th className="px-6 py-3">Name</th>
-                    <th className="px-6 py-3">Role</th>
-                    <th className="px-6 py-3 text-right">Approval Limit</th>
-                  </tr>
+                  <tr><th className="px-6 py-3">Name</th><th className="px-6 py-3">Role</th><th className="px-6 py-3 text-right">Approval Limit</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {isLoading ? <tr><td colSpan={3} className="px-6 py-8 text-center"><Loader2 className="animate-spin mx-auto text-slate-400" /></td></tr> :
@@ -200,7 +187,10 @@ export default function TeamManagement() {
                    team.map(user => (
                     <tr key={user.id} className="hover:bg-slate-50">
                       <td className="px-6 py-4">
-                        <div className="font-medium text-slate-900">{user.full_name}</div>
+                        <div className="font-medium text-slate-900 flex items-center gap-2">
+                          {user.full_name}
+                          {user.can_unfreeze && <AlertTriangle size={14} className="text-red-500" title="Can Unfreeze High-Risk Wires" />}
+                        </div>
                         <div className="text-xs text-slate-500">{user.email}</div>
                       </td>
                       <td className="px-6 py-4">
@@ -208,15 +198,13 @@ export default function TeamManagement() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         {user.role === 'controller' ? (
-                          <button onClick={() => openEditModal(user)} className="inline-flex items-center gap-2 text-slate-900 font-semibold hover:text-blue-600 transition-colors group">
-                            ${Number(user.approval_limit).toLocaleString()}
-                            <Pencil size={14} className="text-slate-300 group-hover:text-blue-600" />
+                          <button onClick={() => openEditModal(user)} className="inline-flex flex-col items-end gap-1 text-slate-900 hover:text-blue-600 group">
+                            <div className="font-semibold flex items-center gap-1">${Number(user.approval_limit).toLocaleString()} <Pencil size={12} className="text-slate-300 group-hover:text-blue-600" /></div>
+                            {user.can_unfreeze && <span className="text-[10px] text-red-600 font-bold tracking-wide">CAN UNFREEZE</span>}
                           </button>
                         ) : user.role === 'cfo' ? (
                           <span className="text-emerald-600 font-semibold text-xs uppercase tracking-wider">Unlimited</span>
-                        ) : (
-                          <span className="text-slate-400 text-xs">$0 (Draft Only)</span>
-                        )}
+                        ) : <span className="text-slate-400 text-xs">$0 (Draft Only)</span>}
                       </td>
                     </tr>
                   ))}
@@ -231,20 +219,29 @@ export default function TeamManagement() {
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
             <div className="p-6 border-b border-slate-100">
-              <h2 className="text-xl font-bold">Edit Approval Limit</h2>
-              <p className="text-sm text-slate-500 mt-1">Update limits for {editingUser.full_name}</p>
+              <h2 className="text-xl font-bold">Edit Controller Limits</h2>
+              <p className="text-sm text-slate-500 mt-1">{editingUser.full_name}</p>
             </div>
             <form onSubmit={handleUpdateLimit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">New Limit (USD)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-slate-500">$</span>
-                  <input required type="number" min="0" value={editLimit} onChange={(e) => setEditLimit(Number(e.target.value))} className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                  <input required type="number" min="0" value={editLimit} onChange={(e) => setEditLimit(Number(e.target.value))} className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-lg" />
                 </div>
               </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={editCanUnfreeze} onChange={(e) => setEditCanUnfreeze(e.target.checked)} className="mt-1" />
+                  <div>
+                    <span className="text-sm font-bold text-red-900 block">Delegate Unfreeze Authority</span>
+                    <span className="text-xs text-red-700">Allow bypassing the Risk Engine.</span>
+                  </div>
+                </label>
+              </div>
               <div className="flex justify-end gap-3 pt-4">
-                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900">Cancel</button>
-                <button type="submit" disabled={isSavingLimit} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-sm font-medium text-slate-600">Cancel</button>
+                <button type="submit" disabled={isSavingLimit} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg flex items-center gap-2">
                   {isSavingLimit ? <Loader2 size={16} className="animate-spin" /> : "Save Changes"}
                 </button>
               </div>
@@ -252,7 +249,6 @@ export default function TeamManagement() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

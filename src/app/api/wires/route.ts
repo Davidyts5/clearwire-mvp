@@ -10,8 +10,10 @@ const WireSchema = z.object({
   vendor: z.string().min(1, "Vendor name is required"),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid dollar amount"),
   purpose: z.string().min(1, "Purpose is required"),
-  destination_country: z.string().length(2).optional().or(z.literal('')),
-  bank_account_last_four: z.string().length(4).optional().or(z.literal(''))
+  account_name: z.string().optional().or(z.literal('')),
+  account_number: z.string().optional().or(z.literal('')),
+  bank_name: z.string().optional().or(z.literal('')),
+  swift_bic: z.string().optional().or(z.literal(''))
 });
 
 export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
@@ -24,15 +26,11 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
 
 export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
   try {
-    // 1. RATE LIMITING FIX: Limit user to 5 requests per minute
     const isAllowed = checkRateLimit(`wires_${auth.userId}`, 5, 60000);
-    if (!isAllowed) {
-      return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
-    }
+    if (!isAllowed) return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
 
     const body = await req.json();
     const validationResult = WireSchema.safeParse(body);
-    
     if (!validationResult.success) {
       const errorMessage = validationResult.error.issues.map(i => `${i.path[0]}: ${i.message}`).join(', ');
       return NextResponse.json({ error: `Validation Error - ${errorMessage}` }, { status: 400 });
@@ -40,9 +38,10 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     
     const parsed = validationResult.data;
 
+    // Check if vendor already exists to trigger strict banking checks
     const { data: vendorData } = await auth.supabase
       .from('vendors')
-      .select('id, account_last_four')
+      .select('id')
       .eq('name', parsed.vendor)
       .eq('company_id', auth.companyId)
       .single();
@@ -53,10 +52,13 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       const { data: newVendor, error: vendorInsertError } = await auth.supabase.from('vendors').insert([{ 
         company_id: auth.companyId, 
         name: parsed.vendor,
-        account_last_four: parsed.bank_account_last_four || null
+        account_name: parsed.account_name,
+        account_number: parsed.account_number,
+        bank_name: parsed.bank_name,
+        swift_bic: parsed.swift_bic
       }]).select().single();
       
-      if (vendorInsertError) return NextResponse.json({ error: `Database missing vendors table.` }, { status: 500 });
+      if (vendorInsertError) return NextResponse.json({ error: `Database missing banking columns. Please run sync script.` }, { status: 500 });
       finalVendorId = newVendor?.id;
     }
 
@@ -66,8 +68,8 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       vendor_name: parsed.vendor,
       amount: parseFloat(parsed.amount),
       purpose: parsed.purpose,
-      destination_country: parsed.destination_country,
-      bank_account_last_four: parsed.bank_account_last_four
+      account_number: parsed.account_number,
+      swift_bic: parsed.swift_bic
     });
 
     const phrases = ["PURPLE ELEPHANT BATTERY", "RED SUNSET OCEAN", "BLUE MOUNTAIN CABIN", "YELLOW TIGER STRIPE", "SILVER COFFEE MUG"];
@@ -78,6 +80,8 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       vendor_id: finalVendorId,
       vendor_name: parsed.vendor, 
       vendor_name_snapshot: parsed.vendor,
+      account_number_snapshot: parsed.account_number,
+      swift_bic_snapshot: parsed.swift_bic,
       amount: parseFloat(parsed.amount),
       purpose: parsed.purpose,
       risk_score: riskAnalysis.totalScore,
@@ -90,29 +94,19 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     if (dbError) return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
 
     await auth.supabase.from('audit_logs').insert([{
-      company_id: auth.companyId,
-      wire_id: requestData.id,
-      actor_id: auth.userId,
-      action: 'CREATED',
-      new_hash: 'INITIAL_STATE'
+      company_id: auth.companyId, wire_id: requestData.id, actor_id: auth.userId, action: 'CREATED', new_hash: 'INITIAL_STATE'
     }]);
 
     if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
       try {
         const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
-        
-        // 2. HOST HEADER INJECTION FIX: Strictly use Environment Variables
-        // Ensure you have set NEXT_PUBLIC_SITE_URL in your Vercel settings!
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-        
         await client.messages.create({
           body: `CLEARWIRE [Risk: ${riskAnalysis.totalScore}]: Wire request $${parsed.amount} to ${parsed.vendor}. Tap to sign: ${siteUrl}/approve/${requestData.id}`,
           from: process.env.TWILIO_PHONE_NUMBER,
           to: process.env.CFO_PHONE_NUMBER!
         });
-      } catch (e) {
-        console.error("Twilio warning:", e);
-      }
+      } catch (e) { console.error("Twilio warning:", e); }
     }
 
     return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });
