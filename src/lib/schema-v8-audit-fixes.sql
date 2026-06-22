@@ -2,6 +2,10 @@
 -- Fixes Privilege Escalation, State Machine Regression, WORM Logs, and adds DB Indexes.
 
 -- 1. FIX PRIVILEGE ESCALATION: Lock down provision_invited_user natively
+-- Clean up old 6-parameter version if it still exists
+DROP FUNCTION IF EXISTS provision_invited_user(UUID, UUID, TEXT, TEXT, TEXT, UUID);
+
+-- Lock down the 7-parameter version
 REVOKE EXECUTE ON FUNCTION provision_invited_user(UUID, UUID, TEXT, TEXT, TEXT, UUID, DECIMAL) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION provision_invited_user(UUID, UUID, TEXT, TEXT, TEXT, UUID, DECIMAL) FROM authenticated;
 GRANT EXECUTE ON FUNCTION provision_invited_user(UUID, UUID, TEXT, TEXT, TEXT, UUID, DECIMAL) TO service_role;
