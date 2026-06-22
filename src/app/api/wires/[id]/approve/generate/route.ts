@@ -3,8 +3,15 @@ import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { getRpId } from '@/lib/webauthn';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
+  // RATE LIMITING FIX: Prevent attackers from spamming challenge generation
+  const isAllowed = checkRateLimit(`webauthn_gen_${auth.userId}`, 10, 60000);
+  if (!isAllowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
+  }
+
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
   const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();

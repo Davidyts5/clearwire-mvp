@@ -4,8 +4,15 @@ import { rpName, getRpId } from '@/lib/webauthn';
 import { withAuth } from '@/lib/api-auth';
 import { isoUint8Array } from '@simplewebauthn/server/helpers';
 import { ROLES } from '@/lib/roles';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const GET = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, auth) => {
+  // RATE LIMITING FIX
+  const isAllowed = checkRateLimit(`webauthn_reg_gen_${auth.userId}`, 10, 60000);
+  if (!isAllowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
+  }
+
   const { data: authenticators, error: fetchError } = await auth.supabase
     .from('user_authenticators')
     .select('credential_id')

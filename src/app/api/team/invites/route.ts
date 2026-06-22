@@ -3,6 +3,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const InviteSchema = z.object({
   email: z.string().email(),
@@ -38,6 +39,12 @@ export const GET = withAuth([ROLES.CFO], async (req, ctx, auth) => {
 
 export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
+    // RATE LIMITING FIX
+    const isAllowed = checkRateLimit(`invite_${auth.userId}`, 10, 60000);
+    if (!isAllowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
+    }
+
     const body = await req.json();
     const parsed = InviteSchema.parse(body);
 

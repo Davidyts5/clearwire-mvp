@@ -24,11 +24,9 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
 
 export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
   try {
-    // 1. RATE LIMITING FIX: Prevent Twilio API draining and DB spam
-    // Limits the user/IP to 10 wire creations per minute.
-    const ip = req.headers.get('x-forwarded-for') || auth.userId;
-    const rateLimit = checkRateLimit(ip, 10, 60000); 
-    if (!rateLimit.success) {
+    // 1. RATE LIMITING FIX: Limit user to 5 requests per minute
+    const isAllowed = checkRateLimit(`wires_${auth.userId}`, 5, 60000);
+    if (!isAllowed) {
       return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
     }
 
@@ -39,15 +37,25 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       const errorMessage = validationResult.error.issues.map(i => `${i.path[0]}: ${i.message}`).join(', ');
       return NextResponse.json({ error: `Validation Error - ${errorMessage}` }, { status: 400 });
     }
+    
     const parsed = validationResult.data;
 
-    const { data: vendorData } = await auth.supabase.from('vendors').select('id, account_last_four').eq('name', parsed.vendor).eq('company_id', auth.companyId).single();
+    const { data: vendorData } = await auth.supabase
+      .from('vendors')
+      .select('id, account_last_four')
+      .eq('name', parsed.vendor)
+      .eq('company_id', auth.companyId)
+      .single();
+
     let finalVendorId = vendorData?.id;
 
     if (!vendorData) {
       const { data: newVendor, error: vendorInsertError } = await auth.supabase.from('vendors').insert([{ 
-        company_id: auth.companyId, name: parsed.vendor, account_last_four: parsed.bank_account_last_four || null
+        company_id: auth.companyId, 
+        name: parsed.vendor,
+        account_last_four: parsed.bank_account_last_four || null
       }]).select().single();
+      
       if (vendorInsertError) return NextResponse.json({ error: `Database missing vendors table.` }, { status: 500 });
       finalVendorId = newVendor?.id;
     }
@@ -66,23 +74,35 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     const antiAiPhrase = phrases[Math.floor(Math.random() * phrases.length)];
 
     const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
-      company_id: auth.companyId, vendor_id: finalVendorId, vendor_name: parsed.vendor, vendor_name_snapshot: parsed.vendor,
-      amount: parseFloat(parsed.amount), purpose: parsed.purpose, risk_score: riskAnalysis.totalScore,
-      risk_reasons: JSON.stringify(riskAnalysis.reasons), clerk_id: auth.userId, status: riskAnalysis.recommendedStatus, anti_ai_phrase: antiAiPhrase 
+      company_id: auth.companyId,
+      vendor_id: finalVendorId,
+      vendor_name: parsed.vendor, 
+      vendor_name_snapshot: parsed.vendor,
+      amount: parseFloat(parsed.amount),
+      purpose: parsed.purpose,
+      risk_score: riskAnalysis.totalScore,
+      risk_reasons: JSON.stringify(riskAnalysis.reasons),
+      clerk_id: auth.userId,
+      status: riskAnalysis.recommendedStatus,
+      anti_ai_phrase: antiAiPhrase 
     }]).select().single();
 
     if (dbError) return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
 
     await auth.supabase.from('audit_logs').insert([{
-      company_id: auth.companyId, wire_id: requestData.id, actor_id: auth.userId, action: 'CREATED', new_hash: 'INITIAL_STATE'
+      company_id: auth.companyId,
+      wire_id: requestData.id,
+      actor_id: auth.userId,
+      action: 'CREATED',
+      new_hash: 'INITIAL_STATE'
     }]);
 
     if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
       try {
         const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
         
-        // 2. HOST-HEADER INJECTION FIX
-        // Replaced req.headers.get('host') with strict environment variable
+        // 2. HOST HEADER INJECTION FIX: Strictly use Environment Variables
+        // Ensure you have set NEXT_PUBLIC_SITE_URL in your Vercel settings!
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
         
         await client.messages.create({
