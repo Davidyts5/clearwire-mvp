@@ -9,7 +9,12 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
   await verifySegregationOfDuties(auth.supabase, params.id, auth.userId);
 
-  const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
+  // FIX: Fetch the vendor_id and snapshots so the self-healing logic has the data it needs!
+  const { data: wireData } = await auth.supabase
+    .from('wire_requests')
+    .select('amount, vendor_id, account_number_snapshot, swift_bic_snapshot')
+    .eq('id', params.id)
+    .single();
   
   if (auth.role === ROLES.CONTROLLER) {
     const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
@@ -69,10 +74,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature || 'fallback_hash').digest('hex');
 
-      // 3. ATOMIC STATE MACHINE (Race Condition Fix)
-      // Calls the newly restored Stored Procedure that executes SELECT FOR UPDATE.
-      // This mathematically guarantees that if two CFOs approve simultaneously,
-      // Postgres locks the row, queues them, and throws an exception on the second attempt.
+      // 1. ATOMIC STATE MACHINE
       const adminClient = await getAdminClient();
       const { data: updatedWire, error: rpcError } = await adminClient.rpc('transition_wire_state', {
         p_wire_id: params.id,
@@ -82,6 +84,31 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       });
 
       if (rpcError) throw new Error(rpcError.message);
+
+      // 2. SELF-HEALING VENDOR MASTER DATA
+      // FIX: Use adminClient to bypass any potential RLS restrictions when updating the vendor table
+      if (wireData.vendor_id && wireData.account_number_snapshot) {
+        const { data: vendorData } = await adminClient
+          .from('vendors')
+          .select('account_number, swift_bic')
+          .eq('id', wireData.vendor_id)
+          .single();
+
+        if (vendorData && (vendorData.account_number !== wireData.account_number_snapshot || vendorData.swift_bic !== wireData.swift_bic_snapshot)) {
+          await adminClient.from('vendors').update({
+            account_number: wireData.account_number_snapshot,
+            swift_bic: wireData.swift_bic_snapshot
+          }).eq('id', wireData.vendor_id);
+
+          await adminClient.from('audit_logs').insert([{
+            company_id: auth.companyId,
+            wire_id: params.id,
+            actor_id: auth.userId,
+            action: 'VENDOR_MASTER_UPDATED',
+            new_hash: `0x${fidoSignatureHash}`
+          }]);
+        }
+      }
 
       return NextResponse.json({ success: true, data: updatedWire });
     }
