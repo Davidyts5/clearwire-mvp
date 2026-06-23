@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2 } from "lucide-react";
+import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { createClient } from "@/lib/supabase";
@@ -10,6 +10,7 @@ import { ROLES, Permissions } from "@/lib/roles";
 export default function ApprovalScreen({ params }: { params: { id: string } }) {
   const [status, setStatus] = useState<string>("loading");
   const [wireDetails, setWireDetails] = useState<any>(null);
+  const [vendorDetails, setVendorDetails] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("Invalid Wire Request.");
 
@@ -26,6 +27,13 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         }
         
         setWireDetails(json.data);
+
+        // Fetch original vendor details for fraud comparison if available
+        if (json.data.vendor_id) {
+          const supabase = createClient();
+          const { data: vData } = await supabase.from('vendors').select('*').eq('id', json.data.vendor_id).single();
+          if (vData) setVendorDetails(vData);
+        }
 
         if (!json.canApprove) return setStatus("unauthorized");
 
@@ -163,12 +171,9 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
     );
   }
 
-  // Parse risk reasons safely
   let riskReasons: string[] = [];
   try {
-    if (wireDetails.risk_reasons) {
-      riskReasons = JSON.parse(wireDetails.risk_reasons);
-    }
+    if (wireDetails.risk_reasons) riskReasons = JSON.parse(wireDetails.risk_reasons);
   } catch (e) {}
 
   return (
@@ -179,14 +184,12 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
       </div>
 
       <div className="p-6 space-y-6">
+        
+        {/* Core Wire Details */}
         <div className="space-y-3">
           <div className="flex justify-between items-end border-b border-slate-100 pb-3">
             <span className="text-sm text-slate-500">Pay To</span>
             <span className="font-semibold text-slate-900">{wireDetails.vendor_name_snapshot}</span>
-          </div>
-          <div className="flex justify-between items-end border-b border-slate-100 pb-3">
-            <span className="text-sm text-slate-500">Bank Account</span>
-            <span className="font-mono text-slate-900 text-sm">*{wireDetails.account_number_snapshot?.slice(-4) || 'N/A'}</span>
           </div>
           <div className="flex justify-between items-end border-b border-slate-100 pb-3">
             <span className="text-sm text-slate-500">Amount</span>
@@ -194,11 +197,40 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
           </div>
         </div>
 
+        {/* FROZEN STATE: Fraud Investigation Panel */}
         {wireDetails.risk_score >= 90 && status === 'frozen' && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
-            <AlertTriangle className="inline mr-2 text-red-600" size={16} />
-            <strong className="text-red-900">Risk Engine Freeze (Score: {wireDetails.risk_score}/100)</strong>
-            <ul className="mt-2 list-disc list-inside pl-1">
+          <div className="bg-red-50 border border-red-300 rounded-xl p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4 border-b border-red-200 pb-3">
+              <AlertTriangle className="text-red-600" size={20} />
+              <h3 className="font-bold text-red-900 text-lg">Fraud Freeze</h3>
+              <span className="ml-auto bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">Score: {wireDetails.risk_score}/100</span>
+            </div>
+
+            {/* Compare the changed banking details side-by-side */}
+            {(wireDetails.account_number_snapshot !== vendorDetails?.account_number || wireDetails.swift_bic_snapshot !== vendorDetails?.swift_bic) && (
+              <div className="space-y-4 mb-4">
+                <p className="text-sm text-red-800 font-medium leading-snug">
+                  The bank account details entered by the AP Clerk do not match the historical records for this vendor.
+                </p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <span className="block text-xs font-bold text-slate-400 uppercase mb-1">Expected (Safe)</span>
+                    <div className="font-mono text-slate-600 truncate" title={vendorDetails?.account_number}>{vendorDetails?.account_number || "None"}</div>
+                    <div className="font-mono text-slate-400 text-xs mt-1">{vendorDetails?.swift_bic}</div>
+                  </div>
+                  <div className="bg-red-100 p-3 rounded border border-red-300">
+                    <span className="block text-xs font-bold text-red-800 uppercase mb-1">Received (Threat)</span>
+                    <div className="font-mono text-red-900 font-bold truncate" title={wireDetails.account_number_snapshot}>{wireDetails.account_number_snapshot || "None"}</div>
+                    <div className="font-mono text-red-700 font-bold text-xs mt-1">{wireDetails.swift_bic_snapshot}</div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-center text-red-400">
+                  <span className="text-xs font-medium uppercase tracking-widest text-red-600">Possible BEC Interception</span>
+                </div>
+              </div>
+            )}
+
+            <ul className="mt-2 list-disc list-inside text-xs text-red-800 space-y-1">
               {riskReasons.map((reason, idx) => (
                 <li key={idx}>{reason}</li>
               ))}
@@ -206,19 +238,35 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        {status === 'under_review' && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-            <strong>Under Manual Review.</strong> This transaction is cleared for authorization.
+        {/* Standard Wire View (If not frozen, or if it has been unlocked to 'under_review') */}
+        {status !== 'frozen' && (
+          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Target Account</span>
+              <span className="font-mono text-slate-900 font-medium truncate max-w-[200px]" title={wireDetails.account_number_snapshot}>{wireDetails.account_number_snapshot || 'N/A'}</span>
+            </div>
+            {wireDetails.swift_bic_snapshot && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">SWIFT / BIC</span>
+                <span className="font-mono text-slate-900 font-medium">{wireDetails.swift_bic_snapshot}</span>
+              </div>
+            )}
           </div>
         )}
 
-        <div className="space-y-3">
+        {status === 'under_review' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+            <strong>Security Override Active.</strong> You have accepted the risk and cleared this transaction for final authorization.
+          </div>
+        )}
+
+        <div className="space-y-3 pt-2">
           {status === 'frozen' ? (
-            <button onClick={() => handleAction('review')} className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2">
-              <Search size={18} /> Initiate Security Review
+            <button onClick={() => handleAction('review')} className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 shadow-sm">
+              <Search size={18} /> Accept Risk & Unfreeze
             </button>
           ) : (
-            <button onClick={handlePasskeyAuth} disabled={status === "verifying"} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl py-4 font-semibold flex items-center justify-center gap-2">
+            <button onClick={handlePasskeyAuth} disabled={status === "verifying"} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl py-4 font-semibold flex items-center justify-center gap-2 shadow-md">
               {status === "verifying" ? <Loader2 className="animate-spin" /> : <Fingerprint />}
               Sign with Passkey
             </button>
