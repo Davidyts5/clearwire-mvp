@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2, ArrowRight } from "lucide-react";
+import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2, FileText, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { createClient } from "@/lib/supabase";
@@ -13,6 +13,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   const [vendorDetails, setVendorDetails] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("Invalid Wire Request.");
+  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchWireAndVerifyRole = async () => {
@@ -28,16 +29,22 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         
         setWireDetails(json.data);
 
-        // Fetch original vendor details for fraud comparison if available
+        const supabase = createClient();
+
+        // 1. Fetch original vendor details for fraud comparison if available
         if (json.data.vendor_id) {
-          const supabase = createClient();
           const { data: vData } = await supabase.from('vendors').select('*').eq('id', json.data.vendor_id).single();
           if (vData) setVendorDetails(vData);
         }
 
+        // 2. Fetch Secure Invoice URL if an invoice was attached
+        if (json.data.invoice_path) {
+          const { data: urlData } = await supabase.storage.from('invoices').createSignedUrl(json.data.invoice_path, 3600); // 1 hour expiry
+          if (urlData?.signedUrl) setInvoiceUrl(urlData.signedUrl);
+        }
+
         if (!json.canApprove) return setStatus("unauthorized");
 
-        const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return setStatus("unauthorized");
 
@@ -195,7 +202,31 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
             <span className="text-sm text-slate-500">Amount</span>
             <span className="text-2xl font-bold text-slate-900">${Number(wireDetails.amount).toLocaleString()}</span>
           </div>
+          <div className="flex justify-between items-end border-b border-slate-100 pb-3">
+            <span className="text-sm text-slate-500">Purpose</span>
+            <span className="font-medium text-slate-700 truncate max-w-[200px]" title={wireDetails.purpose}>{wireDetails.purpose}</span>
+          </div>
         </div>
+
+        {/* Source Document Panel */}
+        {invoiceUrl ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-blue-800">
+              <FileText size={20} />
+              <span className="font-semibold text-sm">Source Document</span>
+            </div>
+            <a href={invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
+              View Invoice
+            </a>
+          </div>
+        ) : (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex items-center justify-between text-slate-500">
+            <div className="flex items-center gap-2">
+              <FileText size={20} />
+              <span className="font-medium text-sm">No Document Attached</span>
+            </div>
+          </div>
+        )}
 
         {/* FROZEN STATE: Fraud Investigation Panel */}
         {wireDetails.risk_score >= 90 && status === 'frozen' && (
@@ -206,7 +237,6 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
               <span className="ml-auto bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">Score: {wireDetails.risk_score}/100</span>
             </div>
 
-            {/* Compare the changed banking details side-by-side */}
             {(wireDetails.account_number_snapshot !== vendorDetails?.account_number || wireDetails.swift_bic_snapshot !== vendorDetails?.swift_bic) && (
               <div className="space-y-4 mb-4">
                 <p className="text-sm text-red-800 font-medium leading-snug">
@@ -238,7 +268,6 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        {/* Standard Wire View (If not frozen, or if it has been unlocked to 'under_review') */}
         {status !== 'frozen' && (
           <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
             <div className="flex justify-between text-sm">

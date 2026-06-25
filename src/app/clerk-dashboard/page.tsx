@@ -10,11 +10,11 @@ export default function ClerkDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Form State
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
   const [vendorName, setVendorName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [swiftBic, setSwiftBic] = useState("");
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,11 +38,8 @@ export default function ClerkDashboard() {
   const handleVendorSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const vId = e.target.value;
     setSelectedVendorId(vId);
-    
     if (vId === "new") {
-      setVendorName("");
-      setAccountNumber("");
-      setSwiftBic("");
+      setVendorName(""); setAccountNumber(""); setSwiftBic("");
     } else {
       const v = vendors.find(v => v.id === vId);
       if (v) {
@@ -53,25 +50,36 @@ export default function ClerkDashboard() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      if (file.size > 2 * 1024 * 1024) {
+        alert("File must be smaller than 2MB to conserve storage.");
+        e.target.value = '';
+        return;
+      }
+      setInvoiceFile(file);
+    }
+  };
+
   const handleNewRequest = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
     
-    const payload = { 
-      vendor: vendorName, 
-      amount: formData.get("amount"), 
-      purpose: formData.get("purpose"),
-      account_number: accountNumber,
-      swift_bic: swiftBic
-    };
+    // Instead of JSON, we append everything to FormData to support file uploading
+    formData.set("vendor", vendorName);
+    formData.set("account_number", accountNumber);
+    formData.set("swift_bic", swiftBic);
+    if (invoiceFile) formData.set("invoice", invoiceFile);
 
     try {
-      const res = await fetch('/api/wires', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const res = await fetch('/api/wires', { method: 'POST', body: formData });
       const result = await res.json();
       if (result.success) {
         setRequests([result.data, ...requests]);
         setIsModalOpen(false);
+        setInvoiceFile(null);
         if (result.data.status === 'frozen') {
           alert(`Warning: This request was flagged by the Risk Engine and frozen for CFO review.`);
         } else {
@@ -150,7 +158,7 @@ export default function ClerkDashboard() {
                 <div className="space-y-4 pt-2 border-t border-slate-100">
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">Bank Account / IBAN</label>
-                    <input required value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} className="w-full border p-2 rounded font-mono text-sm" placeholder="e.g. GB29NWBK60161331926819" />
+                    <input value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} className="w-full border p-2 rounded font-mono text-sm" placeholder="e.g. GB29NWBK60161331926819" />
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">SWIFT / BIC (Optional)</label>
@@ -162,6 +170,12 @@ export default function ClerkDashboard() {
               <div><label className="block text-sm font-bold text-slate-700 mb-1 mt-4">Amount (USD)</label><input required name="amount" type="number" min="1" step="0.01" className="w-full border p-2 rounded font-mono" /></div>
               <div><label className="block text-sm font-bold text-slate-700 mb-1">Purpose / Invoice Reference</label><input required name="purpose" className="w-full border p-2 rounded" placeholder="Invoice #INV-2026-991" /></div>
               
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <label className="block text-sm font-bold text-slate-700 mb-1">Attach Source Invoice (Optional)</label>
+                <input type="file" accept=".pdf,.png,.jpg" onChange={handleFileChange} className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                <p className="text-[10px] text-slate-400 mt-1">PDF, PNG, JPG up to 2MB. Highly recommended to avoid Risk Engine penalties.</p>
+              </div>
+
               <div className="flex justify-end gap-3 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)}>Cancel</button>
                 <button type="submit" disabled={!selectedVendorId || isSubmitting} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded font-medium shadow-sm flex items-center gap-2">
