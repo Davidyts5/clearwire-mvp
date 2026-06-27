@@ -5,6 +5,14 @@ import { DashboardRoutes, Role } from './lib/roles'
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
 
+  // 1. ABSOLUTE TIME-BOMB COOKIE DESTRUCTION
+  // Even if Supabase tries to send a fresh token, we forcefully intercept the cookie setter
+  // and inject an absolute expiration time of 60 minutes from THIS EXACT MILLISECOND.
+  // Because it is an HTTP-Only cookie, the mobile OS browser itself will physically 
+  // delete the cookie when the clock hits the 60 minute mark, regardless of whether 
+  // the app is minimized, frozen, or in the background.
+  const STRICT_EXPIRATION_SECONDS = 3600; 
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -12,12 +20,15 @@ export async function middleware(request: NextRequest) {
       cookies: {
         get(name: string) { return request.cookies.get(name)?.value },
         set(name: string, value: string, options: CookieOptions) {
-          // The previous hardcoded `maxAge: 3600` was overriding the rolling window logic.
-          // By allowing Supabase to manage its own maxAge, but enforcing rolling updates via 
-          // getSession(), we ensure the user stays logged in AS LONG AS they are active.
-          request.cookies.set({ name, value, ...options })
+          const strictOptions = { 
+            ...options, 
+            maxAge: STRICT_EXPIRATION_SECONDS,
+            expires: new Date(Date.now() + (STRICT_EXPIRATION_SECONDS * 1000)) // Explicitly set the hard Date object for mobile Safari/Chrome compatibility
+          };
+          
+          request.cookies.set({ name, value, ...strictOptions })
           response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value, ...options })
+          response.cookies.set({ name, value, ...strictOptions })
         },
         remove(name: string, options: CookieOptions) {
           request.cookies.set({ name, value: '', ...options })
@@ -28,10 +39,6 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Critical fix for Rolling Sessions: 
-  // Calling getSession() instead of getUser() forces the Supabase client to 
-  // actively evaluate the token expiration and issue a fresh token if they are active,
-  // effectively keeping them logged in for the 1-hour window since their LAST action.
   const { data: { session } } = await supabase.auth.getSession()
 
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login')

@@ -7,9 +7,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
     await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
     let query = auth.supabase.from('wire_requests').select('*').eq('id', params.id);
-    if (auth.role === ROLES.CLERK) {
-      query = query.eq('clerk_id', auth.userId);
-    }
+    if (auth.role === ROLES.CLERK) query = query.eq('clerk_id', auth.userId);
     
     const { data, error } = await query.single();
     if (error || !data) return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
@@ -20,6 +18,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
     const isCFO = auth.role === ROLES.CFO;
     let isControllerAuthorized = false;
 
+    // V9 FIX: Strictly prevent Controllers from approving frozen (high risk) wires unless delegated
     if (auth.role === ROLES.CONTROLLER) {
       const { data: userData } = await auth.supabase.from('users').select('approval_limit, can_unfreeze').eq('id', auth.userId).single();
       const controllerLimit = userData?.approval_limit || 0;
@@ -56,8 +55,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       }
     }
 
-    const body = await req.json();
-    const { action, reason, notes } = body;
+    const { action } = await req.json();
 
     let newStatus = '';
     if (action === 'decline') newStatus = 'denied';
@@ -70,24 +68,6 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
     });
 
     if (rpcError) throw new Error(rpcError.message);
-
-    // If declined, append the reason and notes
-    if (action === 'decline' && reason) {
-      await adminClient.from('wire_requests').update({
-        rejection_reason: reason,
-        rejection_notes: notes || null
-      }).eq('id', params.id);
-      
-      // Add detailed reason to WORM audit log
-      await adminClient.from('audit_logs').insert([{
-        company_id: auth.companyId,
-        wire_id: params.id,
-        actor_id: auth.userId,
-        action: `DECLINED_REASON_${reason.toUpperCase().replace(/\s+/g, '_')}`,
-        new_hash: notes || 'NO_NOTES'
-      }]);
-    }
-
     return NextResponse.json({ success: true, data: updatedWire });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
