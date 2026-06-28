@@ -5,12 +5,6 @@ import { DashboardRoutes, Role } from './lib/roles'
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
 
-  // 1. ABSOLUTE TIME-BOMB COOKIE DESTRUCTION
-  // Even if Supabase tries to send a fresh token, we forcefully intercept the cookie setter
-  // and inject an absolute expiration time of 60 minutes from THIS EXACT MILLISECOND.
-  // Because it is an HTTP-Only cookie, the mobile OS browser itself will physically 
-  // delete the cookie when the clock hits the 60 minute mark, regardless of whether 
-  // the app is minimized, frozen, or in the background.
   const STRICT_EXPIRATION_SECONDS = 3600; 
 
   const supabase = createServerClient(
@@ -23,7 +17,7 @@ export async function middleware(request: NextRequest) {
           const strictOptions = { 
             ...options, 
             maxAge: STRICT_EXPIRATION_SECONDS,
-            expires: new Date(Date.now() + (STRICT_EXPIRATION_SECONDS * 1000)) // Explicitly set the hard Date object for mobile Safari/Chrome compatibility
+            expires: new Date(Date.now() + (STRICT_EXPIRATION_SECONDS * 1000)) 
           };
           
           request.cookies.set({ name, value, ...strictOptions })
@@ -40,6 +34,15 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { session } } = await supabase.auth.getSession()
+
+  // ---------------------------------------------------------
+  // THE MARKETING PAGE FIX
+  // If the user visits the root domain ("/"), let them see the landing page!
+  // Do not redirect them.
+  if (request.nextUrl.pathname === '/') {
+    return response;
+  }
+  // ---------------------------------------------------------
 
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
   const isInviteRoute = request.nextUrl.pathname.startsWith('/invite')
