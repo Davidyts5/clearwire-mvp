@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { LogOut, Loader2 } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { createClient } from "@/lib/supabase"; // Correctly import the SSR-compatible browser client
+import { createClient } from "@/lib/supabase"; 
 
 export default function SessionManager() {
   const pathname = usePathname();
@@ -18,20 +18,25 @@ export default function SessionManager() {
       // 1. Tell Supabase to kill the session on the backend
       await supabase.auth.signOut();
       
-      // 2. Overwrite all possible session cookies to ensure the middleware drops the user
+      // 2. Eradicate ALL possible Supabase cookie formats 
+      // Supabase recently updated their cookie chunks (e.g., sb-xxx-auth-token.0)
       const domains = [window.location.hostname, `.${window.location.hostname}`];
       
       domains.forEach(domain => {
-        document.cookie = `sb-access-token=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
-        document.cookie = `sb-refresh-token=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
-        document.cookie = `supabase-auth-token=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
+        const cookies = document.cookie.split(";");
+        cookies.forEach(cookie => {
+          const cookieName = cookie.split("=")[0].trim();
+          if (cookieName.startsWith("sb-") || cookieName.startsWith("supabase")) {
+            document.cookie = `${cookieName}=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
+            document.cookie = `${cookieName}=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
+          }
+        });
       });
       
       // 3. Force hard redirect to login
       window.location.href = '/login';
     } catch (e) {
       console.error("Logout failed", e);
-      // Fallback redirect even if Supabase fails
       window.location.href = '/login';
     }
   };
@@ -66,7 +71,7 @@ export default function SessionManager() {
   }
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4 z-50">
       <div className="hidden sm:flex items-center gap-2 text-emerald-400 text-xs font-semibold bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
         <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
         Secure Session
@@ -74,7 +79,7 @@ export default function SessionManager() {
       <button 
         onClick={handleLogout} 
         disabled={isLoggingOut}
-        className="flex items-center gap-1.5 text-sm font-medium text-slate-300 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 shadow-sm disabled:opacity-50"
+        className="flex items-center gap-1.5 text-sm font-medium text-slate-300 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 shadow-sm disabled:opacity-50 cursor-pointer"
       >
         {isLoggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />} 
         {isLoggingOut ? "Logging out..." : "Logout"}

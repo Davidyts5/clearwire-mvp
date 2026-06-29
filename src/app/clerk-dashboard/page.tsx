@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Plus, CheckCircle2, Clock, FileText, Loader2, ExternalLink, XCircle, AlertTriangle } from "lucide-react";
+import { Plus, CheckCircle2, Clock, FileText, Loader2, ExternalLink, XCircle, AlertTriangle, MessageSquare, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 export default function ClerkDashboard() {
@@ -9,6 +9,9 @@ export default function ClerkDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Rejection Details Modal
+  const [viewingRejection, setViewingRejection] = useState<any>(null);
 
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
   const [vendorName, setVendorName] = useState("");
@@ -67,7 +70,6 @@ export default function ClerkDashboard() {
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
     
-    // Instead of JSON, we append everything to FormData to support file uploading
     formData.set("vendor", vendorName);
     formData.set("account_number", accountNumber);
     formData.set("swift_bic", swiftBic);
@@ -118,7 +120,12 @@ export default function ClerkDashboard() {
                   <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name_snapshot}</td>
                   <td className="px-6 py-4 text-slate-900 font-semibold">${Number(req.amount).toLocaleString()}</td>
                   <td className="px-6 py-4">
-                    {req.status === 'frozen' ? <span className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle size={14}/> Frozen</span> : req.status}
+                    {req.status === 'frozen' ? <span className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle size={14}/> Frozen</span> : 
+                     req.status === 'denied' ? (
+                       <button onClick={() => setViewingRejection(req)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200 hover:bg-red-200 transition-colors">
+                         <XCircle size={14} /> Denied (View Notes)
+                       </button>
+                     ) : req.status}
                   </td>
                   <td className="px-6 py-4">
                     {req.status === 'approved' ? <a href={`/api/pdf/${req.id}`} className="text-blue-600">PDF</a> : '-'}
@@ -129,6 +136,32 @@ export default function ClerkDashboard() {
           </table>
         </div>
       </div>
+
+      {viewingRejection && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden my-8 animate-in fade-in zoom-in-95">
+            <div className="p-6 border-b border-slate-100">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-red-600"><XCircle size={24} /> Wire Rejected</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <span className="text-xs font-bold text-slate-400 uppercase block mb-1">Rejection Reason</span>
+                <span className="font-semibold text-slate-900">{viewingRejection.rejection_reason || 'Declined by Executive'}</span>
+              </div>
+              
+              {viewingRejection.rejection_notes && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <span className="text-xs font-bold text-blue-800 uppercase block mb-1 flex items-center gap-1"><MessageSquare size={12}/> Notes from Approver</span>
+                  <span className="text-sm text-blue-900 italic">"{viewingRejection.rejection_notes}"</span>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button onClick={() => setViewingRejection(null)} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-sm font-medium">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
