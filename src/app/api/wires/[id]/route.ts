@@ -18,7 +18,6 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
     const isCFO = auth.role === ROLES.CFO;
     let isControllerAuthorized = false;
 
-    // V9 FIX: Strictly prevent Controllers from approving frozen (high risk) wires unless delegated
     if (auth.role === ROLES.CONTROLLER) {
       const { data: userData } = await auth.supabase.from('users').select('approval_limit, can_unfreeze').eq('id', auth.userId).single();
       const controllerLimit = userData?.approval_limit || 0;
@@ -55,7 +54,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       }
     }
 
-    const { action } = await req.json();
+    const { action, rejection_reason, rejection_notes } = await req.json();
 
     let newStatus = '';
     if (action === 'decline') newStatus = 'denied';
@@ -64,7 +63,12 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
     const adminClient = await getAdminClient();
     const { data: updatedWire, error: rpcError } = await adminClient.rpc('transition_wire_state', {
-      p_wire_id: params.id, p_new_status: newStatus, p_actor_id: auth.userId
+      p_wire_id: params.id, 
+      p_new_status: newStatus, 
+      p_actor_id: auth.userId,
+      p_crypto_hash: 'SYSTEM_GENERATED',
+      p_rejection_reason: rejection_reason || null,
+      p_rejection_notes: rejection_notes || null
     });
 
     if (rpcError) throw new Error(rpcError.message);
