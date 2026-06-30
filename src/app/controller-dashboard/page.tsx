@@ -2,13 +2,14 @@
 import { useState, useEffect } from "react";
 import { ShieldCheck, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+import DataFilters, { FilterConfig } from "@/components/DataFilters";
 
 export default function ControllerDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [limit, setLimit] = useState(0);
-  const supabase = createClient();
 
   useEffect(() => {
     const fetchWiresAndContext = async () => {
@@ -24,19 +25,34 @@ export default function ControllerDashboard() {
         const json = await res.json();
         
         if (json.success) {
-          const sorted = json.data.sort((a: any, b: any) => {
-            const aAction = a.status === 'pending' || a.status === 'frozen';
-            const bAction = b.status === 'pending' || b.status === 'frozen';
-            if (aAction && !bAction) return -1;
-            if (!aAction && bAction) return 1;
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          });
-          setRequests(sorted);
+          setRequests(json.data);
+          setFilteredRequests(json.data); 
         }
       } catch (err) {} finally { setIsLoading(false); }
     };
     fetchWiresAndContext();
   }, []);
+
+  const filterConfig: FilterConfig = {
+    searchPlaceholder: "Search vendor, purpose, or ID...",
+    searchKeys: ['vendor_name_snapshot', 'purpose', 'id'],
+    statuses: [
+      { label: 'Pending Auth', value: 'pending' },
+      { label: 'Frozen', value: 'frozen' },
+      { label: 'Under Review', value: 'under_review' },
+      { label: 'Approved', value: 'approved' },
+      { label: 'Denied', value: 'denied' },
+    ],
+    sortOptions: [
+      { label: 'Newest First', value: 'newest' },
+      { label: 'Oldest First', value: 'oldest' },
+      { label: 'Highest Amount', value: 'highest_amount' },
+      { label: 'Lowest Amount', value: 'lowest_amount' },
+      { label: 'Vendor A-Z', value: 'vendor_a_z' },
+    ],
+    showDateFilter: true,
+    showAmountFilter: true 
+  };
 
   const pendingCount = requests.filter(r => (r.status === 'pending' || r.status === 'frozen') && r.amount <= limit).length;
 
@@ -51,7 +67,6 @@ export default function ControllerDashboard() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Link href="/cfo-portal/devices" className="bg-slate-800 px-4 py-2 rounded-lg text-sm font-medium">Device Registration</Link>
           <div className="text-sm font-medium bg-blue-900/50 text-blue-200 border border-blue-800/50 px-4 py-2 rounded-lg uppercase">
             Role: CONTROLLER (Max ${Number(limit).toLocaleString()})
           </div>
@@ -63,15 +78,18 @@ export default function ControllerDashboard() {
           <h2 className="text-xl font-bold text-slate-900">Wire Authorization Queue</h2>
           {pendingCount > 0 && <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">{pendingCount} Action Required</span>}
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        
+        <DataFilters data={requests} config={filterConfig} onFilterChange={setFilteredRequests} />
+
+        <div className="overflow-x-auto rounded-lg border border-slate-200 mt-6">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
               <tr><th className="px-6 py-4">Action</th><th className="px-6 py-4">Vendor</th><th className="px-6 py-4">Amount</th><th className="px-6 py-4">Status</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? <tr><td colSpan={4} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" /></td></tr> : 
-               requests.length === 0 ? <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No wires.</td></tr> : 
-               requests.map((req) => {
+               filteredRequests.length === 0 ? <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No wires match criteria.</td></tr> : 
+               filteredRequests.map((req) => {
                  const canApprove = (req.status === 'pending' || req.status === 'frozen') && req.amount <= limit;
                  return (
                   <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${canApprove ? 'bg-blue-50/30' : ''}`}>

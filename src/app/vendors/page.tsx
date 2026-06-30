@@ -4,9 +4,11 @@ import { Plus, Loader2, ExternalLink, Building2 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { ROLES } from "@/lib/roles";
+import DataFilters, { FilterConfig } from "@/components/DataFilters";
 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState<any[]>([]);
+  const [filteredVendors, setFilteredVendors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>("");
 
@@ -26,7 +28,10 @@ export default function VendorsPage() {
         const res = await fetch(`/api/vendors?t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         
-        if (json.success) setVendors(json.data);
+        if (json.success) {
+          setVendors(json.data);
+          setFilteredVendors(json.data); // Initialize filter state
+        }
       } catch (err) {} finally { setIsLoading(false); }
     };
     fetchData();
@@ -42,10 +47,26 @@ export default function VendorsPage() {
       const res = await fetch('/api/vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const result = await res.json();
       if (result.success) {
-        setVendors([...vendors, result.data].sort((a,b) => a.name.localeCompare(b.name)));
+        const newData = [...vendors, result.data].sort((a,b) => a.name.localeCompare(b.name));
+        setVendors(newData);
+        setFilteredVendors(newData);
         setIsModalOpen(false);
       } else { alert("Error: " + result.error); }
     } catch (err) { alert("Failed to connect to server."); } finally { setIsSubmitting(false); }
+  };
+
+  const filterConfig: FilterConfig = {
+    searchPlaceholder: "Search vendor name, account, or SWIFT...",
+    searchKeys: ['name', 'account_number', 'swift_bic'],
+    statuses: [
+      { label: 'Active', value: 'active' },
+      { label: 'Inactive', value: 'inactive' },
+    ],
+    sortOptions: [
+      { label: 'Vendor A-Z', value: 'vendor_a_z' },
+      { label: 'Newest First', value: 'newest' },
+      { label: 'Oldest First', value: 'oldest' }
+    ]
   };
 
   return (
@@ -62,7 +83,9 @@ export default function VendorsPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <DataFilters data={vendors} config={filterConfig} onFilterChange={setFilteredVendors} />
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
@@ -70,8 +93,8 @@ export default function VendorsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500"><Loader2 className="w-6 h-6 animate-spin mx-auto"/></td></tr> : 
-               vendors.length === 0 ? <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">No vendors found.</td></tr> : 
-               vendors.map((v) => (
+               filteredVendors.length === 0 ? <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">No vendors match criteria.</td></tr> : 
+               filteredVendors.map((v) => (
                 <tr key={v.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4 font-medium text-slate-900">{v.name}</td>
                   <td className="px-6 py-4 font-mono text-slate-500">{v.account_number ? `*${v.account_number.slice(-4)}` : 'N/A'}</td>

@@ -3,11 +3,12 @@ import { useState, useEffect } from "react";
 import { ShieldCheck, Loader2, ExternalLink, Users, Settings } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
+import DataFilters, { FilterConfig } from "@/components/DataFilters";
 
 export default function CFODashboard() {
   const [requests, setRequests] = useState<any[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
     const fetchWires = async () => {
@@ -16,19 +17,35 @@ export default function CFODashboard() {
         const res = await fetch(`/api/wires?t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         if (json.success) {
-          const sorted = json.data.sort((a: any, b: any) => {
-            const aAction = a.status === 'pending' || a.status === 'frozen';
-            const bAction = b.status === 'pending' || b.status === 'frozen';
-            if (aAction && !bAction) return -1;
-            if (!aAction && bAction) return 1;
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          });
-          setRequests(sorted);
+          setRequests(json.data);
+          setFilteredRequests(json.data);
         }
       } catch (err) {} finally { setIsLoading(false); }
     };
     fetchWires();
   }, []);
+
+  const filterConfig: FilterConfig = {
+    searchPlaceholder: "Search vendor, purpose, or ID...",
+    searchKeys: ['vendor_name_snapshot', 'purpose', 'id'],
+    statuses: [
+      { label: 'Pending Auth', value: 'pending' },
+      { label: 'Frozen', value: 'frozen' },
+      { label: 'Under Review', value: 'under_review' },
+      { label: 'Approved', value: 'approved' },
+      { label: 'Denied', value: 'denied' },
+    ],
+    sortOptions: [
+      { label: 'Newest First', value: 'newest' },
+      { label: 'Oldest First', value: 'oldest' },
+      { label: 'Highest Amount', value: 'highest_amount' },
+      { label: 'Lowest Amount', value: 'lowest_amount' },
+      { label: 'Vendor A-Z', value: 'vendor_a_z' },
+    ],
+    showDateFilter: true,
+    showAmountFilter: true,
+    showCfoQuickFilters: true
+  };
 
   const pendingCount = requests.filter(r => r.status === 'pending' || r.status === 'frozen').length;
 
@@ -43,9 +60,8 @@ export default function CFODashboard() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Link href="/cfo-portal/team" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium"><Users size={16} className="text-blue-400" /> Team</Link>
-          <Link href="/cfo-portal/settings" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium"><Settings size={16} className="text-slate-300" /> Policies</Link>
-          <Link href="/cfo-portal/devices" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">Device Registration</Link>
+          <Link href="/team" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium"><Users size={16} className="text-blue-400" /> Team</Link>
+          <Link href="/settings" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium"><Settings size={16} className="text-slate-300" /> Policies</Link>
           <div className="text-sm font-medium bg-blue-900/50 text-blue-200 border border-blue-800/50 px-4 py-2 rounded-lg uppercase">Role: CFO</div>
         </div>
       </div>
@@ -55,15 +71,18 @@ export default function CFODashboard() {
           <h2 className="text-xl font-bold text-slate-900">Wire Authorization Queue</h2>
           {pendingCount > 0 && <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full border border-amber-200 animate-pulse">{pendingCount} Action Required</span>}
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+
+        <DataFilters data={requests} config={filterConfig} onFilterChange={setFilteredRequests} />
+
+        <div className="overflow-x-auto rounded-lg border border-slate-200 mt-6">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
               <tr><th className="px-6 py-4">Action</th><th className="px-6 py-4">Vendor</th><th className="px-6 py-4">Amount</th><th className="px-6 py-4">Status</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? <tr><td colSpan={4} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" /></td></tr> : 
-               requests.length === 0 ? <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No wires.</td></tr> : 
-               requests.map((req) => {
+               filteredRequests.length === 0 ? <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No wires match criteria.</td></tr> : 
+               filteredRequests.map((req) => {
                 const canApprove = req.status === 'pending' || req.status === 'frozen';
                 return (
                   <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${canApprove ? 'bg-blue-50/30' : ''}`}>
