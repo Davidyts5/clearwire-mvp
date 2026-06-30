@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Loader2, ExternalLink, Building2 } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 import { ROLES } from "@/lib/roles";
 import DataFilters, { FilterConfig } from "@/components/DataFilters";
 
@@ -16,6 +16,7 @@ export default function VendorsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    const supabase = createClient();
     const fetchData = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();

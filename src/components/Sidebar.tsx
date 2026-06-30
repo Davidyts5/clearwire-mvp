@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShieldCheck, Loader2 } from "lucide-react";
 import { getNavItemsForRole } from "@/config/navigation";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 import { Role } from "@/lib/roles";
 import SessionManager from "./SessionManager";
 
@@ -17,6 +17,7 @@ export default function Sidebar() {
   const isAuthRoute = pathname === '/login' || pathname === '/' || pathname.startsWith('/invite');
 
   useEffect(() => {
+    const supabase = createClient();
     if (isAuthRoute) return;
 
     const fetchRole = async () => {

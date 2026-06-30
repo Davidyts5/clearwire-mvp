@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { ShieldCheck, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 import DataFilters, { FilterConfig } from "@/components/DataFilters";
 
 export default function ControllerDashboard() {
@@ -12,6 +12,7 @@ export default function ControllerDashboard() {
   const [limit, setLimit] = useState(0);
 
   useEffect(() => {
+    const supabase = createClient();
     const fetchWiresAndContext = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();

@@ -22,6 +22,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   const [isSubmittingDecline, setIsSubmittingDecline] = useState(false);
 
   useEffect(() => {
+    const supabase = createClient();
     const fetchWireAndVerifyRole = async () => {
       try {
         const cacheBuster = new Date().getTime();

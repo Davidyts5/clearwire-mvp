@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { ShieldCheck, Loader2, ExternalLink, Search, Filter, PlayCircle, Download } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 
 export default function AuditorDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -10,6 +10,7 @@ export default function AuditorDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
+    const supabase = createClient();
     const fetchWires = async () => {
       try {
         const cacheBuster = new Date().getTime();
