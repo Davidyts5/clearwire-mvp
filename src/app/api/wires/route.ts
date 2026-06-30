@@ -115,7 +115,6 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
       company_id: auth.companyId,
       vendor_id: finalVendorId,
-      vendor_name: parsed.vendor, 
       vendor_name_snapshot: parsed.vendor,
       account_number_snapshot: parsed.account_number,
       swift_bic_snapshot: parsed.swift_bic,
@@ -144,7 +143,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
           from: process.env.TWILIO_PHONE_NUMBER,
           to: process.env.CFO_PHONE_NUMBER!
         });
-      } catch (e) { console.error("Twilio warning:", e); }
+      } catch (e) {}
     }
 
     return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });

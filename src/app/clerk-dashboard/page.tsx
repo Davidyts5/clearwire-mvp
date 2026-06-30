@@ -2,14 +2,17 @@
 import { useState, useEffect } from "react";
 import { Plus, CheckCircle2, Clock, FileText, Loader2, ExternalLink, XCircle, AlertTriangle, MessageSquare, Activity } from "lucide-react";
 import Link from "next/link";
+import DataFilters, { FilterConfig } from "@/components/DataFilters";
 
 export default function ClerkDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [viewingRejection, setViewingRejection] = useState<any>(null);
+
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
   const [vendorName, setVendorName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -28,7 +31,10 @@ export default function ClerkDashboard() {
         const wireJson = await wireRes.json();
         const vendorJson = await vendorRes.json();
         
-        if (wireJson.success) setRequests(wireJson.data);
+        if (wireJson.success) {
+          setRequests(wireJson.data);
+          setFilteredRequests(wireJson.data);
+        }
         if (vendorJson.success) setVendors(vendorJson.data);
       } catch (err) {} finally { setIsLoading(false); }
     };
@@ -51,7 +57,7 @@ export default function ClerkDashboard() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      if (file.size > 2 * 1024 * 1024) { alert("File must be smaller than 2MB to conserve storage."); e.target.value = ''; return; }
+      if (file.size > 2 * 1024 * 1024) { alert("File must be smaller than 2MB."); e.target.value = ''; return; }
       setInvoiceFile(file);
     }
   };
@@ -69,17 +75,34 @@ export default function ClerkDashboard() {
       const res = await fetch('/api/wires', { method: 'POST', body: formData });
       const result = await res.json();
       if (result.success) {
-        setRequests([result.data, ...requests]);
+        const newData = [result.data, ...requests];
+        setRequests(newData);
+        setFilteredRequests(newData);
         setIsModalOpen(false);
         setInvoiceFile(null);
       } else { alert("Error: " + result.error); }
     } catch (err) { alert("Failed to connect to server."); } finally { setIsSubmitting(false); }
   };
 
-  const draftCount = requests.filter(r => r.status === 'pending').length;
-  const frozenCount = requests.filter(r => r.status === 'frozen' || r.status === 'under_review').length;
-  const rejectedCount = requests.filter(r => r.status === 'denied').length;
-  const approvedCount = requests.filter(r => r.status === 'approved').length;
+  const filterConfig: FilterConfig = {
+    searchPlaceholder: "Search vendor, purpose, or ID...",
+    searchKeys: ['vendor_name_snapshot', 'purpose', 'id'],
+    statuses: [
+      { label: 'Pending Auth', value: 'pending' },
+      { label: 'Approved', value: 'approved' },
+      { label: 'Denied', value: 'denied' },
+      { label: 'Frozen', value: 'frozen' },
+      { label: 'Under Review', value: 'under_review' },
+    ],
+    sortOptions: [
+      { label: 'Newest First', value: 'newest' },
+      { label: 'Oldest First', value: 'oldest' },
+      { label: 'Highest Amount', value: 'highest_amount' },
+      { label: 'Lowest Amount', value: 'lowest_amount' },
+      { label: 'Vendor A-Z', value: 'vendor_a_z' },
+    ],
+    showDateFilter: true
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-8">
@@ -93,36 +116,18 @@ export default function ClerkDashboard() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="text-slate-500 text-sm font-medium mb-1">Active Drafts</div>
-          <div className="text-3xl font-bold text-slate-900">{draftCount}</div>
-        </div>
-        <div className="bg-amber-50 p-6 rounded-xl shadow-sm border border-amber-200">
-          <div className="text-amber-700 text-sm font-medium mb-1">Under Review</div>
-          <div className="text-3xl font-bold text-amber-900">{frozenCount}</div>
-        </div>
-        <div className="bg-red-50 p-6 rounded-xl shadow-sm border border-red-200">
-          <div className="text-red-700 text-sm font-medium mb-1">Rejected Wires</div>
-          <div className="text-3xl font-bold text-red-900">{rejectedCount}</div>
-        </div>
-        <div className="bg-emerald-50 p-6 rounded-xl shadow-sm border border-emerald-200">
-          <div className="text-emerald-700 text-sm font-medium mb-1">Approved Wires</div>
-          <div className="text-3xl font-bold text-emerald-900">{approvedCount}</div>
-        </div>
-      </div>
+      <DataFilters data={requests} config={filterConfig} onFilterChange={setFilteredRequests} />
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b border-slate-100 bg-slate-50 font-semibold text-slate-800">Your Wire Requests</div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-white border-b border-slate-100 text-slate-500">
-              <tr><th className="px-6 py-4">Request ID</th><th className="px-6 py-4">Vendor</th><th className="px-6 py-4">Amount</th><th className="px-6 py-4">Status</th><th className="px-6 py-4">Audit PDF</th></tr>
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
+              <tr><th className="px-6 py-4">Request ID</th><th className="px-6 py-4">Vendor</th><th className="px-6 py-4">Amount</th><th className="px-6 py-4">Status</th><th className="px-6 py-4 text-right">Audit PDF</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500"><Loader2 className="animate-spin mx-auto"/></td></tr> : 
-               requests.length === 0 ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">No requests drafted yet.</td></tr> : 
-               requests.map((req) => (
+               filteredRequests.length === 0 ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">No requests found.</td></tr> : 
+               filteredRequests.map((req) => (
                 <tr key={req.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4 font-mono text-xs">
                     <Link href={`/approve/${req.id}`} className="text-blue-600 hover:text-blue-800 flex items-center gap-1 font-semibold underline">{req.id.substring(0, 8)}... <ExternalLink size={12} /></Link>
@@ -137,8 +142,8 @@ export default function ClerkDashboard() {
                        </button>
                      ) : req.status}
                   </td>
-                  <td className="px-6 py-4">
-                    {req.status === 'approved' ? <a href={`/api/pdf/${req.id}`} target="_blank" className="text-blue-600 font-semibold flex items-center gap-1"><FileText size={14}/> PDF</a> : '-'}
+                  <td className="px-6 py-4 text-right">
+                    {req.status === 'approved' ? <a href={`/api/pdf/${req.id}`} target="_blank" className="text-blue-600 font-semibold inline-flex items-center gap-1"><FileText size={14}/> PDF</a> : '-'}
                   </td>
                 </tr>
               ))}
