@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import SessionManager from "@/components/SessionManager";
+import Link from "next/link";
+import { ShieldCheck, Building2, FileText, Users, Activity } from "lucide-react";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,20 +20,51 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <div className="min-h-screen bg-slate-50 text-slate-900">
-          <nav className="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md">
-            <div className="flex items-center space-x-2 font-bold text-xl tracking-tight">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+        <div className="min-h-screen bg-slate-50 text-slate-900 flex">
+          
+          {/* Global Sidebar Navigation */}
+          <div className="w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex min-h-screen shrink-0 border-r border-slate-800">
+            <div className="p-6 flex items-center gap-2 font-bold text-xl tracking-tight text-white border-b border-slate-800">
+              <ShieldCheck className="text-blue-400" size={28} />
               <span>ClearWire</span>
             </div>
             
-            {/* The new Session Manager injects the Logout button and inactivity timer dynamically */}
-            <SessionManager />
+            <div className="flex-1 py-6 px-4 space-y-2">
+              <Link href="/login" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 hover:text-white transition-colors">
+                <Activity size={18} /> Dashboard
+              </Link>
+              <Link href="/vendors" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 hover:text-white transition-colors">
+                <Building2 size={18} /> Vendors
+              </Link>
+              <Link href="/auditor-dashboard" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 hover:text-white transition-colors">
+                <FileText size={18} /> Audit Logs
+              </Link>
+              <Link href="/cfo-portal/team" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 hover:text-white transition-colors">
+                <Users size={18} /> Team & Policies
+              </Link>
+            </div>
             
-          </nav>
-          <main className="p-4 md:p-8 max-w-5xl mx-auto">
-            {children}
-          </main>
+            <div className="p-4 border-t border-slate-800">
+               <SessionManager />
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Mobile Header */}
+            <div className="md:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md">
+              <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
+                <ShieldCheck className="text-blue-400" size={24} />
+                <span>ClearWire</span>
+              </div>
+              <SessionManager />
+            </div>
+
+            <main className="flex-1 overflow-y-auto">
+              {children}
+            </main>
+          </div>
+
         </div>
       </body>
     </html>
