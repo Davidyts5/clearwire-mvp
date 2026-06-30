@@ -144,7 +144,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
           from: process.env.TWILIO_PHONE_NUMBER,
           to: process.env.CFO_PHONE_NUMBER!
         });
-      } catch (e) {}
+      } catch (e) { console.error("Twilio warning:", e); }
     }
 
     return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });

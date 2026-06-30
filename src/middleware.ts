@@ -1,10 +1,10 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { DashboardRoutes, Role } from './lib/roles'
+import { NAVIGATION_CONFIG } from './config/navigation'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
-
   const STRICT_EXPIRATION_SECONDS = 3600; 
 
   const supabase = createServerClient(
@@ -19,7 +19,6 @@ export async function middleware(request: NextRequest) {
             maxAge: STRICT_EXPIRATION_SECONDS,
             expires: new Date(Date.now() + (STRICT_EXPIRATION_SECONDS * 1000)) 
           };
-          
           request.cookies.set({ name, value, ...strictOptions })
           response = NextResponse.next({ request: { headers: request.headers } })
           response.cookies.set({ name, value, ...strictOptions })
@@ -35,25 +34,17 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session } } = await supabase.auth.getSession()
 
-  // ---------------------------------------------------------
-  // THE MARKETING PAGE FIX
-  // If the user visits the root domain ("/"), let them see the landing page!
-  // Do not redirect them.
-  if (request.nextUrl.pathname === '/') {
-    return response;
-  }
-  // ---------------------------------------------------------
+  const path = request.nextUrl.pathname;
+  if (path === '/') return response;
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
-  const isInviteRoute = request.nextUrl.pathname.startsWith('/invite')
-  const isProtectedBase = 
-    request.nextUrl.pathname.startsWith('/clerk-dashboard') ||
-    request.nextUrl.pathname.startsWith('/controller-dashboard') ||
-    request.nextUrl.pathname.startsWith('/cfo-dashboard') ||
-    request.nextUrl.pathname.startsWith('/auditor-dashboard') ||
-    request.nextUrl.pathname.startsWith('/approve');
+  const isAuthRoute = path.startsWith('/login');
+  const isInviteRoute = path.startsWith('/invite');
+  
+  // Public static assets
+  if (path.startsWith('/_next') || path.startsWith('/api') || path.includes('.')) return response;
 
-  if (!session && isProtectedBase && !isInviteRoute) {
+  // 1. Unauthenticated users hitting protected routes
+  if (!session && !isAuthRoute && !isInviteRoute) {
     const redirectUrl = new URL('/login', request.url);
     redirectUrl.searchParams.set('next', request.nextUrl.pathname);
     return NextResponse.redirect(redirectUrl);
@@ -61,17 +52,44 @@ export async function middleware(request: NextRequest) {
 
   if (!session) return response;
 
+  // 2. Extract Role
   const { data: userData } = await supabase.from('users').select('role').eq('id', session.user.id).single();
   const role = userData?.role as Role;
-
   const targetDashboard = DashboardRoutes[role] || '/login';
 
-  if (request.nextUrl.pathname.startsWith('/clerk-dashboard') && role !== 'clerk') return NextResponse.redirect(new URL(targetDashboard, request.url));
-  if (request.nextUrl.pathname.startsWith('/controller-dashboard') && role !== 'controller') return NextResponse.redirect(new URL(targetDashboard, request.url));
-  if (request.nextUrl.pathname.startsWith('/cfo-dashboard') && role !== 'cfo') return NextResponse.redirect(new URL(targetDashboard, request.url));
-  if (request.nextUrl.pathname.startsWith('/auditor-dashboard') && role !== 'auditor') return NextResponse.redirect(new URL(targetDashboard, request.url));
+  // 3. Centralized Route Protection Mapping
+  const routePermissions: Record<string, Role[]> = {
+    '/clerk-dashboard': ['clerk'],
+    '/controller-dashboard': ['controller'],
+    '/cfo-dashboard': ['cfo'],
+    '/auditor-dashboard': ['auditor'],
+    '/executive': ['cfo'],
+    '/approvals': ['controller'],
+    '/team': ['cfo'],
+    '/settings': ['cfo'],
+    '/audit': ['cfo', 'auditor'],
+    '/reports': ['auditor'],
+    '/vendors': ['clerk', 'controller', 'cfo'],
+    '/profile': ['clerk', 'controller', 'cfo', 'auditor'],
+    '/approve': ['clerk', 'controller', 'cfo', 'auditor'], 
+  };
 
-  if (request.nextUrl.pathname === '/dashboard' || request.nextUrl.pathname === '/cfo-portal') {
+  // Find required roles for current route
+  let requiredRoles: Role[] | null = null;
+  for (const [route, roles] of Object.entries(routePermissions)) {
+    if (path.startsWith(route)) {
+      requiredRoles = roles as Role[];
+      break;
+    }
+  }
+
+  // If route is protected and user role is not allowed, redirect to dashboard
+  if (requiredRoles && !requiredRoles.includes(role)) {
+    return NextResponse.redirect(new URL(targetDashboard, request.url));
+  }
+
+  // Handle Dynamic `/dashboard` link -> redirect to their actual dashboard
+  if (path === '/dashboard') {
     return NextResponse.redirect(new URL(targetDashboard, request.url));
   }
 
@@ -83,5 +101,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api|images|images).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api|images).*)'],
 };
