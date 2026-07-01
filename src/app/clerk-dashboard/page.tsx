@@ -17,6 +17,7 @@ export default function ClerkDashboard() {
   const [vendorName, setVendorName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [swiftBic, setSwiftBic] = useState("");
+  const [destinationCountry, setDestinationCountry] = useState("");
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -44,13 +45,12 @@ export default function ClerkDashboard() {
   const handleVendorSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const vId = e.target.value;
     setSelectedVendorId(vId);
-    if (vId === "new") {
-      setVendorName(""); setAccountNumber(""); setSwiftBic("");
-    } else {
-      const v = vendors.find(v => v.id === vId);
-      if (v) {
-        setVendorName(v.name); setAccountNumber(v.account_number || ""); setSwiftBic(v.swift_bic || "");
-      }
+    const v = vendors.find(v => v.id === vId);
+    if (v) {
+      setVendorName(v.name);
+      setAccountNumber(v.account_number || "");
+      setSwiftBic(v.swift_bic || "");
+      setDestinationCountry(v.country || "");
     }
   };
 
@@ -69,6 +69,7 @@ export default function ClerkDashboard() {
     formData.set("vendor", vendorName);
     formData.set("account_number", accountNumber);
     formData.set("swift_bic", swiftBic);
+    if (destinationCountry) formData.set("destination_country", destinationCountry);
     if (invoiceFile) formData.set("invoice", invoiceFile);
 
     try {
@@ -184,28 +185,15 @@ export default function ClerkDashboard() {
                 <label className="block text-sm font-bold text-slate-700 mb-1">Select Vendor</label>
                 <select value={selectedVendorId} onChange={handleVendorSelect} className="w-full border p-2 rounded text-sm bg-slate-50">
                   <option value="" disabled>-- Select a Vendor --</option>
-                  <option value="new" className="font-bold">+ Add New Vendor</option>
                   {vendors.map(v => (
                     <option key={v.id} value={v.id}>{v.name} (Acct: *{v.account_number?.slice(-4) || 'N/A'})</option>
                   ))}
                 </select>
               </div>
-              {selectedVendorId === "new" && (
-                <div className="animate-in fade-in slide-in-from-top-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-1">New Vendor Name</label>
-                  <input required value={vendorName} onChange={e=>setVendorName(e.target.value)} className="w-full border p-2 rounded" />
-                </div>
-              )}
               {selectedVendorId && (
-                <div className="space-y-4 pt-2 border-t border-slate-100">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Bank Account / IBAN</label>
-                    <input value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} className="w-full border p-2 rounded font-mono text-sm" placeholder="e.g. GB29NWBK60161331926819" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">SWIFT / BIC (Optional)</label>
-                    <input value={swiftBic} onChange={e=>setSwiftBic(e.target.value)} className="w-full border p-2 rounded font-mono text-sm uppercase" placeholder="e.g. BOFAUS3N" />
-                  </div>
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
+                  <div><span className="text-xs font-bold text-slate-500 uppercase">Bank Account / IBAN</span><div className="font-mono text-sm font-semibold text-slate-800">{accountNumber || "N/A"}</div></div>
+                  <div><span className="text-xs font-bold text-slate-500 uppercase">SWIFT / BIC</span><div className="font-mono text-sm font-semibold text-slate-800">{swiftBic || "N/A"}</div></div>
                 </div>
               )}
               <div><label className="block text-sm font-bold text-slate-700 mb-1 mt-4">Amount (USD)</label><input required name="amount" type="number" min="1" step="0.01" className="w-full border p-2 rounded font-mono" /></div>

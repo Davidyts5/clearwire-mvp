@@ -31,7 +31,7 @@ export default function VendorsPage() {
         
         if (json.success) {
           setVendors(json.data);
-          setFilteredVendors(json.data); // Initialize filter state
+          setFilteredVendors(json.data);
         }
       } catch (err) {} finally { setIsLoading(false); }
     };
@@ -52,6 +52,7 @@ export default function VendorsPage() {
         setVendors(newData);
         setFilteredVendors(newData);
         setIsModalOpen(false);
+        alert("Vendor added successfully!");
       } else { alert("Error: " + result.error); }
     } catch (err) { alert("Failed to connect to server."); } finally { setIsSubmitting(false); }
   };
@@ -101,8 +102,8 @@ export default function VendorsPage() {
                   <td className="px-6 py-4 font-mono text-slate-500">{v.account_number ? `*${v.account_number.slice(-4)}` : 'N/A'}</td>
                   <td className="px-6 py-4 font-mono text-slate-500">{v.swift_bic || 'N/A'}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${v.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'}`}>
-                      {v.status}
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${v.status === 'active' || !v.status ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'}`}>
+                      {v.status || 'active'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -123,12 +124,20 @@ export default function VendorsPage() {
             <div className="p-6 border-b border-slate-100"><h2 className="text-xl font-bold">Add Trusted Vendor</h2></div>
             <form onSubmit={handleNewVendor} className="p-6 space-y-4">
               <div><label className="block text-sm font-bold text-slate-700 mb-1">Company / Vendor Name</label><input required name="name" className="w-full border p-2 rounded" /></div>
-              <div><label className="block text-sm font-bold text-slate-700 mb-1">Account Name (Optional)</label><input name="account_name" className="w-full border p-2 rounded" /></div>
-              <div><label className="block text-sm font-bold text-slate-700 mb-1">Account Number / IBAN</label><input required name="account_number" className="w-full border p-2 rounded font-mono" /></div>
-              <div><label className="block text-sm font-bold text-slate-700 mb-1">SWIFT / BIC (Optional)</label><input name="swift_bic" className="w-full border p-2 rounded font-mono" /></div>
+              <div><label className="block text-sm font-bold text-slate-700 mb-1">Account Name</label><input required name="account_name" className="w-full border p-2 rounded" /></div>
+              <div><label className="block text-sm font-bold text-slate-700 mb-1">IBAN / Account Number</label><input required name="account_number" className="w-full border p-2 rounded font-mono" /></div>
+              <div><label className="block text-sm font-bold text-slate-700 mb-1">SWIFT / BIC (Optional)</label><input name="swift_bic" className="w-full border p-2 rounded font-mono uppercase" /></div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-sm font-bold text-slate-700 mb-1">Country</label><input required name="country" className="w-full border p-2 rounded uppercase" maxLength={2} placeholder="US" /></div>
+                <div><label className="block text-sm font-bold text-slate-700 mb-1">Currency</label><input required name="currency" className="w-full border p-2 rounded uppercase" maxLength={3} placeholder="USD" /></div>
+              </div>
+
+              <div><label className="block text-sm font-bold text-slate-700 mb-1">Contact Email (Optional)</label><input type="email" name="contact_email" className="w-full border p-2 rounded" /></div>
+
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2 rounded">{isSubmitting ? 'Saving...' : 'Add Vendor'}</button>
+                <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2 rounded">{isSubmitting ? 'Saving...' : 'Save Vendor'}</button>
               </div>
             </form>
           </div>
