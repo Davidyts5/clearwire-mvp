@@ -116,6 +116,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       company_id: auth.companyId,
       vendor_id: finalVendorId,
       vendor_name_snapshot: parsed.vendor,
+      vendor_name: parsed.vendor,
       account_number_snapshot: parsed.account_number,
       swift_bic_snapshot: parsed.swift_bic,
       invoice_path: storedInvoicePath,

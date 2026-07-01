@@ -39,7 +39,6 @@ export const NAVIGATION_CONFIG: NavItem[] = [
   { label: 'System Settings', href: '/settings', icon: Settings, allowedRoles: [ROLES.CFO] },
   
   // User
-  { label: 'Profile', href: '/profile', icon: UserCircle, allowedRoles: [ROLES.CLERK, ROLES.CONTROLLER, ROLES.CFO, ROLES.AUDITOR] },
 ];
 
 export const getNavItemsForRole = (role: Role) => {
