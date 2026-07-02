@@ -175,7 +175,7 @@ export default function VendorRequestsPage() {
                     {Object.keys(viewingRequest.old_data || {}).map(key => (
                       <div key={key}>
                         <span className="text-xs font-bold text-slate-400 uppercase block">{key.replace(/_/g, ' ')}</span>
-                        <span className={`text-sm ${viewingRequest.old_data?.[key] !== viewingRequest.new_data?.[key] ? 'line-through text-red-500' : 'text-slate-700'}`}>{viewingRequest.old_data[key] || 'None'}</span>
+                        <span className={`text-sm ${viewingRequest.old_data?.[key] !== viewingRequest.new_data?.[key] ? 'line-through text-red-500' : 'text-slate-700'}`}>{viewingRequest.old_data?.[key] || 'None'}</span>
                       </div>
                     ))}
                   </div>
@@ -189,7 +189,7 @@ export default function VendorRequestsPage() {
                       return (
                         <div key={key}>
                           <span className="text-xs font-bold text-slate-400 uppercase block">{key.replace(/_/g, ' ')}</span>
-                          <span className={`text-sm ${isChanged ? 'font-bold text-emerald-600 bg-emerald-50 px-1 rounded' : 'text-slate-700'}`}>{viewingRequest.new_data[key] || 'None'}</span>
+                          <span className={`text-sm ${isChanged ? 'font-bold text-emerald-600 bg-emerald-50 px-1 rounded' : 'text-slate-700'}`}>{viewingRequest.new_data?.[key] || 'None'}</span>
                         </div>
                       );
                     })}
