@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckSquare, Loader2, FileText, CheckCircle, XCircle, ArrowRightRight, Eye, ShieldCheck, AlertTriangle } from "lucide-react";
+import { CheckSquare, Loader2, FileText, CheckCircle, XCircle, ArrowRight, Eye, ShieldCheck, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { ROLES } from "@/lib/roles";
 import DataFilters, { FilterConfig } from "@/components/DataFilters";
@@ -127,7 +127,7 @@ export default function VendorRequestsPage() {
                   <tr key={req.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4 font-medium">
                       {req.status === 'pending' ? <span className="text-amber-600 flex items-center gap-1"><Loader2 size={14}/> Pending Review</span> :
-                       req.status === 'awaiting_cfo' ? <span className="text-purple-600 flex items-center gap-1"><ArrowRightRight size={14}/> Escalated to CFO</span> :
+                       req.status === 'awaiting_cfo' ? <span className="text-purple-600 flex items-center gap-1"><ArrowRight size={14}/> Escalated to CFO</span> :
                        req.status === 'approved' ? <span className="text-emerald-600 flex items-center gap-1"><CheckCircle size={14}/> Approved</span> :
                        <span className="text-red-600 flex items-center gap-1"><XCircle size={14}/> Rejected</span>}
                     </td>
@@ -182,7 +182,7 @@ export default function VendorRequestsPage() {
                 </div>
 
                 <div className="bg-white border border-blue-200 rounded-xl overflow-hidden shadow-sm ring-1 ring-blue-50">
-                  <div className="bg-blue-50 px-4 py-3 border-b border-blue-100"><h3 className="font-bold text-blue-800 flex items-center gap-2"><ArrowRightRight size={16}/> Requested Changes</h3></div>
+                  <div className="bg-blue-50 px-4 py-3 border-b border-blue-100"><h3 className="font-bold text-blue-800 flex items-center gap-2"><ArrowRight size={16}/> Requested Changes</h3></div>
                   <div className="p-4 space-y-3">
                     {Object.keys(viewingRequest.new_data || {}).map(key => {
                       const isChanged = viewingRequest.old_data?.[key] !== viewingRequest.new_data?.[key];

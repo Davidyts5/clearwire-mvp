@@ -4,8 +4,8 @@ import { getAdminClient } from '@/lib/api-auth';
 export async function GET() {
   try {
     const admin = await getAdminClient();
-    const { data: users, error } = await admin.from('users').select('id, role, approval_limit').limit(5);
-    return NextResponse.json({ users, error });
+    const { data, error } = await admin.from('vendor_change_requests').select('*').limit(1);
+    return NextResponse.json({ data, error });
   } catch (err: any) {
     return NextResponse.json({ error: err.message });
   }
