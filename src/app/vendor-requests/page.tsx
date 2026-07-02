@@ -172,10 +172,10 @@ export default function VendorRequestsPage() {
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                   <div className="bg-slate-100 px-4 py-3 border-b border-slate-200"><h3 className="font-bold text-slate-700">Current Values</h3></div>
                   <div className="p-4 space-y-3">
-                    {Object.keys(viewingRequest.old_data).map(key => (
+                    {Object.keys(viewingRequest.old_data || {}).map(key => (
                       <div key={key}>
-                        <span className="text-xs font-bold text-slate-400 uppercase block">{key.replace('_', ' ')}</span>
-                        <span className={`text-sm ${viewingRequest.old_data[key] !== viewingRequest.new_data[key] ? 'line-through text-red-500' : 'text-slate-700'}`}>{viewingRequest.old_data[key] || 'None'}</span>
+                        <span className="text-xs font-bold text-slate-400 uppercase block">{key.replace(/_/g, ' ')}</span>
+                        <span className={`text-sm ${viewingRequest.old_data?.[key] !== viewingRequest.new_data?.[key] ? 'line-through text-red-500' : 'text-slate-700'}`}>{viewingRequest.old_data[key] || 'None'}</span>
                       </div>
                     ))}
                   </div>
@@ -184,11 +184,11 @@ export default function VendorRequestsPage() {
                 <div className="bg-white border border-blue-200 rounded-xl overflow-hidden shadow-sm ring-1 ring-blue-50">
                   <div className="bg-blue-50 px-4 py-3 border-b border-blue-100"><h3 className="font-bold text-blue-800 flex items-center gap-2"><ArrowRightRight size={16}/> Requested Changes</h3></div>
                   <div className="p-4 space-y-3">
-                    {Object.keys(viewingRequest.new_data).map(key => {
-                      const isChanged = viewingRequest.old_data[key] !== viewingRequest.new_data[key];
+                    {Object.keys(viewingRequest.new_data || {}).map(key => {
+                      const isChanged = viewingRequest.old_data?.[key] !== viewingRequest.new_data?.[key];
                       return (
                         <div key={key}>
-                          <span className="text-xs font-bold text-slate-400 uppercase block">{key.replace('_', ' ')}</span>
+                          <span className="text-xs font-bold text-slate-400 uppercase block">{key.replace(/_/g, ' ')}</span>
                           <span className={`text-sm ${isChanged ? 'font-bold text-emerald-600 bg-emerald-50 px-1 rounded' : 'text-slate-700'}`}>{viewingRequest.new_data[key] || 'None'}</span>
                         </div>
                       );
