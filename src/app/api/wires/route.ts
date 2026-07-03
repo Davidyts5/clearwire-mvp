@@ -73,10 +73,12 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
 
     const { data: vendorData } = await auth.supabase
       .from('vendors')
-      .select('id, account_number')
+      .select('id, account_number, status')
       .eq('name', parsed.vendor)
       .eq('company_id', auth.companyId)
       .single();
+
+    if (vendorData?.status === "restricted") return NextResponse.json({ error: "This vendor is restricted and cannot be used for new wires." }, { status: 403 });
 
     let finalVendorId = vendorData?.id;
 

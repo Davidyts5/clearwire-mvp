@@ -15,6 +15,8 @@ export default function VendorRequestsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionReason, setActionReason] = useState("");
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [rejectFlow, setRejectFlow] = useState(false);
+  const [restrictVendor, setRestrictVendor] = useState(false);
 
   const fetchRequests = async () => {
     setIsLoading(true);
@@ -44,6 +46,8 @@ export default function VendorRequestsPage() {
   const handleReviewClick = async (req: any) => {
     setViewingRequest(req);
     setActionReason("");
+    setRejectFlow(false);
+    setRestrictVendor(false);
     setDocumentUrl(null);
     if (req.document_path) {
       const supabase = createClient();
@@ -63,7 +67,7 @@ export default function VendorRequestsPage() {
       const res = await fetch(`/api/vendors/requests/${viewingRequest.id}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, reason: actionReason })
+        body: JSON.stringify({ action, reason: actionReason, restrict_vendor: restrictVendor })
       });
       const result = await res.json();
       if (result.success) {
@@ -207,21 +211,54 @@ export default function VendorRequestsPage() {
             </div>
 
             <div className="p-6 border-t border-slate-100 bg-white shrink-0">
-              {((viewingRequest.status === 'pending' && userRole === ROLES.CONTROLLER) || (viewingRequest.status === 'awaiting_cfo' && userRole === ROLES.CFO)) ? (
-                <div className="space-y-4">
-                  <input type="text" placeholder="Optional notes or required rejection reason..." value={actionReason} onChange={(e) => setActionReason(e.target.value)} className="w-full border p-2 rounded text-sm" />
-                  <div className="flex items-center justify-between">
-                    <button type="button" onClick={() => setViewingRequest(null)} className="text-slate-500 font-medium text-sm">Cancel</button>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleAction('reject')} disabled={isSubmitting} className="bg-red-100 text-red-700 hover:bg-red-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Reject</button>
-                      {userRole === ROLES.CONTROLLER && <button onClick={() => handleAction('escalate')} disabled={isSubmitting} className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Escalate to CFO</button>}
-                      <button onClick={() => handleAction('approve')} disabled={isSubmitting} className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm">Authorize & Update</button>
+              {((viewingRequest.status === "pending" && userRole === ROLES.CONTROLLER) || (viewingRequest.status === "awaiting_cfo" && userRole === ROLES.CFO)) ? (
+                rejectFlow ? (
+                  <div className="space-y-4 bg-red-50 p-4 rounded-xl border border-red-100">
+                    <h3 className="font-bold text-red-800 flex items-center gap-2"><AlertTriangle size={18}/> Confirm Rejection</h3>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Reason for rejection (Required)</label>
+                      <textarea required value={actionReason} onChange={e => setActionReason(e.target.value)} className="w-full border p-2 rounded text-sm bg-white" rows={2} placeholder="Why is this change being rejected?" />
+                    </div>
+                    {userRole === ROLES.CFO && (
+                      <div className="space-y-2 mt-4">
+                        <label className="block text-sm font-bold text-slate-700">Action after rejection:</label>
+                        <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${!restrictVendor ? "bg-white border-blue-500 ring-1 ring-blue-500" : "bg-white border-slate-200"}`}>
+                          <input type="radio" checked={!restrictVendor} onChange={() => setRestrictVendor(false)} className="mt-1" />
+                          <div>
+                            <div className="font-bold text-slate-900 text-sm">Keep Vendor Active</div>
+                            <div className="text-xs text-slate-500">Reject the requested change but continue normal business with the currently approved vendor details.</div>
+                          </div>
+                        </label>
+                        <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${restrictVendor ? "bg-red-50 border-red-500 ring-1 ring-red-500" : "bg-white border-slate-200"}`}>
+                          <input type="radio" checked={restrictVendor} onChange={() => setRestrictVendor(true)} className="mt-1" />
+                          <div>
+                            <div className="font-bold text-red-900 text-sm">Restrict Vendor</div>
+                            <div className="text-xs text-red-700">Reject the requested change and temporarily block all new business with this vendor until the restriction is removed.</div>
+                          </div>
+                        </label>
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-red-200/50">
+                      <button type="button" onClick={() => setRejectFlow(false)} className="px-4 py-2 font-medium text-slate-600 hover:text-slate-900 text-sm">Cancel</button>
+                      <button onClick={() => handleAction("reject")} disabled={isSubmitting || !actionReason.trim()} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm flex items-center gap-2">
+                        {isSubmitting ? <Loader2 className="animate-spin" size={16}/> : "Confirm Rejection"}
+                      </button>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    <input type="text" placeholder="Optional notes for approval..." value={actionReason} onChange={(e) => setActionReason(e.target.value)} className="w-full border p-2 rounded text-sm bg-slate-50" />
+                    <div className="flex items-center justify-between">
+                      <button type="button" onClick={() => setViewingRequest(null)} className="text-slate-500 font-medium text-sm">Cancel</button>
+                      <div className="flex gap-2">
+                        <button onClick={() => setRejectFlow(true)} className="bg-red-100 text-red-700 hover:bg-red-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Reject...</button>
+                        {userRole === ROLES.CONTROLLER && <button onClick={() => handleAction("escalate")} disabled={isSubmitting} className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Escalate to CFO</button>}
+                        <button onClick={() => handleAction("approve")} disabled={isSubmitting} className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm">Authorize & Update</button>
+                      </div>
+                    </div>
+                  </div>
+                )
               ) : (
-                <div className="flex justify-between items-center">
-                  <p className="text-sm text-slate-500 italic">This request has already been processed or you do not have permission to authorize it.</p>
                   <button type="button" onClick={() => setViewingRequest(null)} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg font-medium text-sm">Close</button>
                 </div>
               )}
