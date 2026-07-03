@@ -156,8 +156,8 @@ export default function VendorRequestsPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden my-8 flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${viewingRequest.status === 'approved' ? 'bg-emerald-100 text-emerald-600' : viewingRequest.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                  {viewingRequest.status === 'approved' ? <CheckCircle size={24} /> : viewingRequest.status === 'rejected' ? <XCircle size={24} /> : <ShieldCheck size={24} />}
+                <div className={`p-2 rounded-lg ${viewingRequest.status === 'approved' ? 'bg-emerald-100 text-emerald-600' : viewingRequest.status === 'rejected' || viewingRequest.status === 'rejected_flagged' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                  {viewingRequest.status === 'approved' ? <CheckCircle size={24} /> : viewingRequest.status === 'rejected' || viewingRequest.status === 'rejected_flagged' ? <XCircle size={24} /> : <ShieldCheck size={24} />}
                 </div>
                 <div>
                   <h2 className="text-xl font-bold">Vendor Change Request</h2>
