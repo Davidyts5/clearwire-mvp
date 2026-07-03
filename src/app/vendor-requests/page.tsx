@@ -259,6 +259,8 @@ export default function VendorRequestsPage() {
                   </div>
                 )
               ) : (
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-slate-500 italic">This request has already been processed or you do not have permission to authorize it.</p>
                   <button type="button" onClick={() => setViewingRequest(null)} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg font-medium text-sm">Close</button>
                 </div>
               )}
