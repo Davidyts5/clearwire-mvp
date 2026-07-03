@@ -248,9 +248,9 @@ export default function VendorRequestsPage() {
                 ) : (
                   <div className="space-y-4">
                     <input type="text" placeholder="Optional notes for approval..." value={actionReason} onChange={(e) => setActionReason(e.target.value)} className="w-full border p-2 rounded text-sm bg-slate-50" />
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                       <button type="button" onClick={() => setViewingRequest(null)} className="text-slate-500 font-medium text-sm">Cancel</button>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <button onClick={() => setRejectFlow(true)} className="bg-red-100 text-red-700 hover:bg-red-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Reject...</button>
                         {userRole === ROLES.CONTROLLER && <button onClick={() => handleAction("escalate")} disabled={isSubmitting} className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Escalate to CFO</button>}
                         <button onClick={() => handleAction("approve")} disabled={isSubmitting} className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm">Authorize & Update</button>
