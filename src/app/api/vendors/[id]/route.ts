@@ -17,7 +17,9 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
 // AP Clerk submits a Vendor Change Request via FormData
 export const POST = withAuth([ROLES.CLERK], async (req, { params }, auth) => {
   try {
-    const vendor = await verifyTenantResource(auth.supabase, 'vendors', params.id, auth.companyId);
+    await verifyTenantResource(auth.supabase, 'vendors', params.id, auth.companyId);
+    const { data: vendor, error: vendorError } = await auth.supabase.from('vendors').select('*').eq('id', params.id).single();
+    if (vendorError || !vendor) return NextResponse.json({ error: 'Vendor not found' }, { status: 404 });
     if (vendor.status === 'restricted') {
       return NextResponse.json({ error: 'Vendor is restricted. Changes are not permitted.' }, { status: 403 });
     }
