@@ -5,6 +5,7 @@ import { Building2, ArrowLeft, Loader2, AlertTriangle, ShieldCheck, Edit, Upload
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import { ROLES } from "@/lib/roles";
+import { COUNTRIES, CURRENCIES } from "@/lib/constants";
 
 export default function VendorProfile({ params }: { params: { id: string } }) {
   const [status, setStatus] = useState<string>("loading");
@@ -175,8 +176,12 @@ export default function VendorProfile({ params }: { params: { id: string } }) {
                   <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Bank Account / IBAN</label><input required name="account_number" defaultValue={vendor.account_number} className="w-full border p-2 rounded font-mono text-sm" /></div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">SWIFT / BIC</label><input name="swift_bic" defaultValue={vendor.swift_bic} className="w-full border p-2 rounded font-mono text-sm uppercase" /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Country</label><input required name="country" defaultValue={vendor.country} className="w-full border p-2 rounded uppercase text-sm" maxLength={2} /></div>
-                    <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Currency</label><input required name="currency" defaultValue={vendor.currency} className="w-full border p-2 rounded uppercase text-sm" maxLength={3} /></div>
+                    <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Country</label><select required name="country" defaultValue={vendor.country || "US"} className="w-full border p-2 rounded bg-white text-sm">
+                      {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                    </select></div>
+                    <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Currency</label><select required name="currency" defaultValue={vendor.currency || "USD"} className="w-full border p-2 rounded bg-white text-sm">
+                      {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                    </select></div>
                   </div>
                 </div>
               </div>

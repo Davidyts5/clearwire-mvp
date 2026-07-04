@@ -139,6 +139,7 @@ export default function VendorsPage() {
               </div>
 
               <div><label className="block text-sm font-bold text-slate-700 mb-1">Contact Email (Optional)</label><input type="email" name="contact_email" className="w-full border p-2 rounded" /></div>
+              <div><label className="block text-sm font-bold text-slate-700 mb-1">Address (Optional)</label><textarea name="address" className="w-full border p-2 rounded" rows={2} /></div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsModalOpen(false)}>Cancel</button>
