@@ -4,6 +4,7 @@ import { Plus, Loader2, ExternalLink, Building2 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import { ROLES } from "@/lib/roles";
+import { COUNTRIES, CURRENCIES } from "@/lib/constants";
 import DataFilters, { FilterConfig } from "@/components/DataFilters";
 
 export default function VendorsPage() {
@@ -129,8 +130,12 @@ export default function VendorsPage() {
               <div><label className="block text-sm font-bold text-slate-700 mb-1">SWIFT / BIC (Optional)</label><input name="swift_bic" className="w-full border p-2 rounded font-mono uppercase" /></div>
               
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-bold text-slate-700 mb-1">Country</label><input required name="country" className="w-full border p-2 rounded uppercase" maxLength={2} placeholder="US" /></div>
-                <div><label className="block text-sm font-bold text-slate-700 mb-1">Currency</label><input required name="currency" className="w-full border p-2 rounded uppercase" maxLength={3} placeholder="USD" /></div>
+                <div><label className="block text-sm font-bold text-slate-700 mb-1">Country</label><select required name="country" defaultValue="US" className="w-full border p-2 rounded bg-slate-50 text-sm font-medium">
+                  {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}
+                </select></div>
+                <div><label className="block text-sm font-bold text-slate-700 mb-1">Currency</label><select required name="currency" defaultValue="USD" className="w-full border p-2 rounded bg-slate-50 text-sm font-medium">
+                  {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} - {c.name}</option>)}
+                </select></div>
               </div>
 
               <div><label className="block text-sm font-bold text-slate-700 mb-1">Contact Email (Optional)</label><input type="email" name="contact_email" className="w-full border p-2 rounded" /></div>
