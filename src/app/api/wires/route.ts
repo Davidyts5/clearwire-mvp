@@ -65,8 +65,9 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
 
       if (uploadError) return NextResponse.json({ error: `Failed to upload invoice. Is the 'invoices' bucket created?` }, { status: 500 });
       storedInvoicePath = uploadData.path;
- else {
+    } else {
       if (parseFloat(parsed.amount) > 5000) invoiceRiskPenalty = 15;
+    }
 
     const { data: vendorData } = await auth.supabase
       .from('vendors')
