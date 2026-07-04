@@ -37,7 +37,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       account_number: formData.get("account_number") as string || undefined,
       swift_bic: formData.get("swift_bic") as string || undefined,
       destination_country: formData.get("destination_country") as string || undefined,
-;
+    };
 
     const validationResult = WireSchema.safeParse(payload);
     if (!validationResult.success) {
