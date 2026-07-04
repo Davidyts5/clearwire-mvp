@@ -37,17 +37,15 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       account_number: formData.get("account_number") as string || undefined,
       swift_bic: formData.get("swift_bic") as string || undefined,
       destination_country: formData.get("destination_country") as string || undefined,
-    };
+;
 
     const validationResult = WireSchema.safeParse(payload);
     if (!validationResult.success) {
       const errorMessage = validationResult.error.issues.map(i => `${i.path[0]}: ${i.message}`).join(', ');
       return NextResponse.json({ error: `Validation Error - ${errorMessage}` }, { status: 400 });
-    }
-    
+
     const parsed = validationResult.data;
 
-    // Process Invoice Upload
     const invoiceFile = formData.get("invoice") as File;
     let storedInvoicePath = null;
     let invoiceRiskPenalty = 0;
@@ -67,9 +65,8 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
 
       if (uploadError) return NextResponse.json({ error: `Failed to upload invoice. Is the 'invoices' bucket created?` }, { status: 500 });
       storedInvoicePath = uploadData.path;
-    } else {
+ else {
       if (parseFloat(parsed.amount) > 5000) invoiceRiskPenalty = 15;
-    }
 
     const { data: vendorData } = await auth.supabase
       .from('vendors')
@@ -88,11 +85,10 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
         name: parsed.vendor,
         account_number: parsed.account_number || null,
         swift_bic: parsed.swift_bic || null
-      }]).select().single();
+  ]).select().single();
       
       if (vendorInsertError) return NextResponse.json({ error: `Database missing vendors table.` }, { status: 500 });
       finalVendorId = newVendor?.id;
-    }
 
     const riskAnalysis = await evaluateWireRisk(auth.supabase, {
       company_id: auth.companyId,
@@ -102,14 +98,9 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       purpose: parsed.purpose,
       destination_country: parsed.destination_country,
       account_number: parsed.account_number,
+      has_invoice: !!storedInvoicePath,
       swift_bic: parsed.swift_bic
-    });
-
-    if (invoiceRiskPenalty > 0) {
-      riskAnalysis.totalScore = Math.min(100, riskAnalysis.totalScore + invoiceRiskPenalty);
-      riskAnalysis.reasons.push("Missing Source Document (No Invoice Attached)");
-      if (riskAnalysis.totalScore >= 90) riskAnalysis.recommendedStatus = 'frozen';
-    }
+);
 
     const phrases = ["PURPLE ELEPHANT BATTERY", "RED SUNSET OCEAN", "BLUE MOUNTAIN CABIN", "YELLOW TIGER STRIPE", "SILVER COFFEE MUG"];
     const antiAiPhrase = phrases[Math.floor(Math.random() * phrases.length)];
@@ -129,25 +120,24 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       clerk_id: auth.userId,
       status: riskAnalysis.recommendedStatus,
       anti_ai_phrase: antiAiPhrase 
-    }]).select().single();
+]).select().single();
 
     if (dbError) return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
 
     await auth.supabase.from('audit_logs').insert([{
       company_id: auth.companyId, wire_id: requestData.id, actor_id: auth.userId, action: 'CREATED', new_hash: 'INITIAL_STATE'
-    }]);
+]);
 
     if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
       try {
         const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http:
         await client.messages.create({
           body: `CLEARWIRE [Risk: ${riskAnalysis.totalScore}]: Wire request $${parsed.amount} to ${parsed.vendor}. Tap to sign: ${siteUrl}/approve/${requestData.id}`,
           from: process.env.TWILIO_PHONE_NUMBER,
           to: process.env.CFO_PHONE_NUMBER!
-        });
-      } catch (e) {}
-    }
+    );
+   catch (e) {}
 
     return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });
   } catch (error: any) {
