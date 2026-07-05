@@ -35,9 +35,11 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
 export const PUT = withAuth([ROLES.CFO], async (req, ctx, auth) => {
   try {
     const body = await req.json();
-    
     const updatePayload: any = { updated_at: new Date().toISOString() };
     
+    // Fetch old settings for audit logging
+    const { data: oldSettings } = await auth.supabase.from('company_settings').select('*').eq('company_id', auth.companyId).single();
+
     if (body.controller_limit !== undefined) {
       updatePayload.approval_tiers = {
         tier1: { max: Number(body.controller_limit), role: "controller" },
@@ -54,6 +56,7 @@ export const PUT = withAuth([ROLES.CFO], async (req, ctx, auth) => {
     if (body.freeze_high_risk_countries !== undefined) updatePayload.freeze_high_risk_countries = body.freeze_high_risk_countries;
     if (body.freeze_above_amount !== undefined) updatePayload.freeze_above_amount = body.freeze_above_amount;
     if (body.freeze_amount_threshold !== undefined) updatePayload.freeze_amount_threshold = body.freeze_amount_threshold;
+    if (body.vendor_auth_policy !== undefined) updatePayload.vendor_auth_policy = body.vendor_auth_policy;
 
     const { data, error } = await auth.supabase
       .from('company_settings')
@@ -63,6 +66,18 @@ export const PUT = withAuth([ROLES.CFO], async (req, ctx, auth) => {
       .single();
 
     if (error) throw error;
+
+    // Security Requirement: Log policy changes to the WORM Audit Log
+    if (body.vendor_auth_policy !== undefined && oldSettings && oldSettings.vendor_auth_policy !== body.vendor_auth_policy) {
+      await auth.supabase.from('audit_logs').insert([{
+        company_id: auth.companyId,
+        wire_id: '00000000-0000-0000-0000-000000000000',
+        actor_id: auth.userId,
+        action: 'POLICY_VENDOR_AUTH_CHANGED',
+        previous_hash: oldSettings.vendor_auth_policy || 'controller_any',
+        new_hash: body.vendor_auth_policy
+      }]);
+    }
     
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
