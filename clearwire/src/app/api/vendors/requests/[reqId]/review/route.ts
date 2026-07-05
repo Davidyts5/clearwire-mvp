@@ -39,6 +39,23 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       return NextResponse.json({ error: 'Only Controllers can escalate to CFO.' }, { status: 403 });
     }
 
+    
+    // Fetch company settings to enforce Vendor Authorization Policy
+    const { data: settings } = await supabaseAdmin.from('company_settings').select('vendor_auth_policy').eq('company_id', auth.companyId).single();
+    const policy = settings?.vendor_auth_policy || 'controller_any';
+
+    if (parsed.action === 'approve' && auth.role === ROLES.CONTROLLER) {
+      if (policy === 'cfo_always') {
+        return NextResponse.json({ error: 'Company policy requires CFO authorization for all vendor changes.' }, { status: 403 });
+      }
+      if (policy === 'cfo_bank_only') {
+        const isBankChange = request.old_data.account_number !== request.new_data.account_number || request.old_data.swift_bic !== request.new_data.swift_bic;
+        if (isBankChange) {
+          return NextResponse.json({ error: 'Company policy requires CFO authorization for banking changes.' }, { status: 403 });
+        }
+      }
+    }
+
     let newReqStatus = '';
     let vendorUpdates = null;
     let historyAction = '';

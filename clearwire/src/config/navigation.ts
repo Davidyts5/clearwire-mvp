@@ -2,7 +2,8 @@ import {
   Activity, 
   Building2, 
   ListTodo,
-  CheckSquare
+  CheckSquare,
+  ShieldCheck
 } from 'lucide-react';
 import { ROLES, Role } from '@/lib/roles';
 
@@ -19,6 +20,7 @@ export const NAVIGATION_CONFIG: NavItem[] = [
   { label: 'Company Wires', href: '/controller-dashboard', icon: ListTodo, allowedRoles: [ROLES.CONTROLLER] },
   { label: 'Vendors', href: '/vendors', icon: Building2, allowedRoles: [ROLES.CLERK, ROLES.CONTROLLER, ROLES.CFO] },
   { label: 'Vendor Requests', href: '/vendor-requests', icon: CheckSquare, allowedRoles: [ROLES.CONTROLLER, ROLES.CFO] },
+  { label: 'Security & Policy Engine', href: '/settings', icon: ShieldCheck, allowedRoles: [ROLES.CFO] },
 ];
 
 export const getNavItemsForRole = (role: Role) => {

@@ -11,7 +11,8 @@ const NewVendorSchema = z.object({
   swift_bic: z.string().optional(),
   country: z.string().min(1, "Country is required"),
   currency: z.string().min(1, "Currency is required"),
-  contact_email: z.string().email("Invalid email").optional().or(z.literal(''))
+  contact_email: z.string().email("Invalid email").optional().or(z.literal('')),
+  address: z.string().optional().or(z.literal(''))
 });
 
 // Fetch the Master Vendor List for the Clerk Dashboard
@@ -19,7 +20,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
   try {
     const { data, error } = await auth.supabase
       .from('vendors')
-      .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status')
+      .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status, address')
       .eq('company_id', auth.companyId)
       .order('name', { ascending: true });
 
@@ -49,6 +50,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       country: parsed.country,
       currency: parsed.currency,
       contact_email: parsed.contact_email || null,
+      address: parsed.address || null,
       status: 'active'
     }]).select().single();
 

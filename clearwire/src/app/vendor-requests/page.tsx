@@ -11,6 +11,7 @@ export default function VendorRequestsPage() {
   const [filteredRequests, setFilteredRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>("");
+  const [vendorAuthPolicy, setVendorAuthPolicy] = useState("controller_any");
   const [viewingRequest, setViewingRequest] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionReason, setActionReason] = useState("");
@@ -29,6 +30,9 @@ export default function VendorRequestsPage() {
       }
 
       const cacheBuster = new Date().getTime();
+      const setRes = await fetch(`/api/settings?t=${cacheBuster}`);
+      const setJson = await setRes.json();
+      if (setJson.data?.vendor_auth_policy) setVendorAuthPolicy(setJson.data.vendor_auth_policy);
       const res = await fetch(`/api/vendors/requests?t=${cacheBuster}`, { cache: 'no-store' });
       const json = await res.json();
       
@@ -211,8 +215,14 @@ export default function VendorRequestsPage() {
             </div>
 
             <div className="p-6 border-t border-slate-100 bg-white shrink-0">
+              
               {((viewingRequest.status === "pending" && userRole === ROLES.CONTROLLER) || (viewingRequest.status === "awaiting_cfo" && userRole === ROLES.CFO)) ? (
-                rejectFlow ? (
+                (() => {
+                  const isBankChange = viewingRequest.old_data?.account_number !== viewingRequest.new_data?.account_number || viewingRequest.old_data?.swift_bic !== viewingRequest.new_data?.swift_bic;
+                  const canControllerApprove = vendorAuthPolicy === 'controller_any' || (vendorAuthPolicy === 'cfo_bank_only' && !isBankChange);
+                  const showApproveButton = userRole === ROLES.CFO || canControllerApprove;
+
+                  return rejectFlow ? (
                   <div className="space-y-4 bg-red-50 p-4 rounded-xl border border-red-100">
                     <h3 className="font-bold text-red-800 flex items-center gap-2"><AlertTriangle size={18}/> Confirm Rejection</h3>
                     <div>
@@ -253,11 +263,16 @@ export default function VendorRequestsPage() {
                       <div className="flex flex-col sm:flex-row gap-2">
                         <button onClick={() => setRejectFlow(true)} className="bg-red-100 text-red-700 hover:bg-red-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Reject...</button>
                         {userRole === ROLES.CONTROLLER && <button onClick={() => handleAction("escalate")} disabled={isSubmitting} className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Escalate to CFO</button>}
-                        <button onClick={() => handleAction("approve")} disabled={isSubmitting} className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm">Authorize & Update</button>
+                        {showApproveButton ? (
+                          <button onClick={() => handleAction("approve")} disabled={isSubmitting} className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm">Authorize & Update</button>
+                        ) : (
+                          <div className="bg-amber-50 text-amber-800 px-4 py-2 rounded-lg font-bold text-sm border border-amber-200">CFO Authorization Required</div>
+                        )}
                       </div>
                     </div>
                   </div>
                 )
+                })()
               ) : (
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-slate-500 italic">This request has already been processed or you do not have permission to authorize it.</p>
