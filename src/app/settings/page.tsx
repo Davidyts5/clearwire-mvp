@@ -159,50 +159,6 @@ export default function SecuritySettings() {
           </div>
         </div>
 
-                {/* Vendor Authorization Strictness Section */}
-        <div className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
-            <ShieldCheck className="text-blue-500" size={24} />
-            <h2 className="text-xl font-bold text-slate-900">Vendor Authorization Strictness</h2>
-          </div>
-
-          <div className="mb-6">
-            <p className="text-slate-600 text-sm">
-              Configure who can approve vendor profile and banking changes.
-            </p>
-          </div>
-
-          {isLoading ? (
-            <div className="space-y-4">
-              <div className="h-16 bg-slate-100 rounded-lg animate-pulse w-full"></div>
-              <div className="h-16 bg-slate-100 rounded-lg animate-pulse w-full"></div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${vendorAuthPolicy === 'controller_any' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'} ${isReadOnly ? 'opacity-75 cursor-not-allowed' : ''}`}>
-                <input type="radio" name="vendorAuthPolicy" value="controller_any" checked={vendorAuthPolicy === 'controller_any'} onChange={() => setVendorAuthPolicy('controller_any')} disabled={isReadOnly} className="mt-1" />
-                <div>
-                  <div className="font-bold text-slate-900 text-sm">Controllers may approve all vendor changes</div>
-                </div>
-              </label>
-              
-              <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${vendorAuthPolicy === 'cfo_bank_only' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'} ${isReadOnly ? 'opacity-75 cursor-not-allowed' : ''}`}>
-                <input type="radio" name="vendorAuthPolicy" value="cfo_bank_only" checked={vendorAuthPolicy === 'cfo_bank_only'} onChange={() => setVendorAuthPolicy('cfo_bank_only')} disabled={isReadOnly} className="mt-1" />
-                <div>
-                  <div className="font-bold text-slate-900 text-sm">Controllers may approve profile changes only; bank account changes require CFO approval</div>
-                </div>
-              </label>
-
-              <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${vendorAuthPolicy === 'cfo_always' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'} ${isReadOnly ? 'opacity-75 cursor-not-allowed' : ''}`}>
-                <input type="radio" name="vendorAuthPolicy" value="cfo_always" checked={vendorAuthPolicy === 'cfo_always'} onChange={() => setVendorAuthPolicy('cfo_always')} disabled={isReadOnly} className="mt-1" />
-                <div>
-                  <div className="font-bold text-slate-900 text-sm">All vendor changes require CFO approval</div>
-                </div>
-              </label>
-            </div>
-          )}
-        </div>
-
         {/* Risk Engine Controls Section */}
         <div className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
@@ -311,7 +267,7 @@ export default function SecuritySettings() {
 
           <div className="mb-6">
             <p className="text-slate-600 text-sm">
-              Determine who has the authority to approve changes to existing vendor master data.
+              Configure who can approve vendor profile and banking changes.
             </p>
           </div>
 
@@ -325,29 +281,28 @@ export default function SecuritySettings() {
               <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${vendorAuthPolicy === 'controller_any' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'} ${isReadOnly ? 'opacity-75 cursor-not-allowed' : ''}`}>
                 <input type="radio" name="vendorAuthPolicy" value="controller_any" checked={vendorAuthPolicy === 'controller_any'} onChange={() => setVendorAuthPolicy('controller_any')} disabled={isReadOnly} className="mt-1" />
                 <div>
-                  <div className="font-bold text-slate-900 text-sm">Controllers may approve vendor changes</div>
-                  <div className="text-xs text-slate-500">Standard behavior. Controllers can fully authorize any vendor modification.</div>
-                </div>
-              </label>
-              
-              <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${vendorAuthPolicy === 'cfo_always' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'} ${isReadOnly ? 'opacity-75 cursor-not-allowed' : ''}`}>
-                <input type="radio" name="vendorAuthPolicy" value="cfo_always" checked={vendorAuthPolicy === 'cfo_always'} onChange={() => setVendorAuthPolicy('cfo_always')} disabled={isReadOnly} className="mt-1" />
-                <div>
-                  <div className="font-bold text-slate-900 text-sm">Controllers review only. Every request automatically escalates to the CFO.</div>
-                  <div className="text-xs text-slate-500">Controllers can reject requests, but cannot approve them. All approvals require CFO sign-off.</div>
+                  <div className="font-bold text-slate-900 text-sm">Controllers may approve all vendor changes.</div>
                 </div>
               </label>
               
               <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${vendorAuthPolicy === 'cfo_bank_only' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'} ${isReadOnly ? 'opacity-75 cursor-not-allowed' : ''}`}>
                 <input type="radio" name="vendorAuthPolicy" value="cfo_bank_only" checked={vendorAuthPolicy === 'cfo_bank_only'} onChange={() => setVendorAuthPolicy('cfo_bank_only')} disabled={isReadOnly} className="mt-1" />
                 <div>
-                  <div className="font-bold text-slate-900 text-sm">CFO approval required for all vendor bank account changes.</div>
-                  <div className="text-xs text-slate-500">Controllers can approve demographic changes (address, email), but banking changes are locked and must be escalated to the CFO.</div>
+                  <div className="font-bold text-slate-900 text-sm">Controllers may approve profile changes only. Bank account changes require CFO approval.</div>
+                </div>
+              </label>
+              
+              <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${vendorAuthPolicy === 'cfo_always' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'} ${isReadOnly ? 'opacity-75 cursor-not-allowed' : ''}`}>
+                <input type="radio" name="vendorAuthPolicy" value="cfo_always" checked={vendorAuthPolicy === 'cfo_always'} onChange={() => setVendorAuthPolicy('cfo_always')} disabled={isReadOnly} className="mt-1" />
+                <div>
+                  <div className="font-bold text-slate-900 text-sm">Controllers review only. All vendor changes require CFO approval.</div>
                 </div>
               </label>
             </div>
           )}
         </div>
+
+
 
         {!isReadOnly && (
           <div className="flex justify-end pt-4">
