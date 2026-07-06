@@ -21,6 +21,7 @@ export const NAVIGATION_CONFIG: NavItem[] = [
   { label: 'Vendors', href: '/vendors', icon: Building2, allowedRoles: [ROLES.CLERK, ROLES.CONTROLLER, ROLES.CFO] },
   { label: 'Vendor Requests', href: '/vendor-requests', icon: CheckSquare, allowedRoles: [ROLES.CONTROLLER, ROLES.CFO] },
   { label: 'Security & Policy Engine', href: '/settings', icon: ShieldCheck, allowedRoles: [ROLES.CFO] },
+  { label: 'Investigation Center', href: '/auditor-dashboard', icon: ShieldCheck, allowedRoles: [ROLES.AUDITOR, ROLES.CFO] },
 ];
 
 export const getNavItemsForRole = (role: Role) => {
