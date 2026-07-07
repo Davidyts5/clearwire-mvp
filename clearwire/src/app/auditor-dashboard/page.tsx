@@ -1,114 +1,106 @@
 "use client";
 import { useState, useEffect } from "react";
-import { ShieldCheck, Loader2, ExternalLink, Search, Filter, PlayCircle, Download } from "lucide-react";
+import { ShieldCheck, Loader2, Search, AlertTriangle, Activity, FileDigit, Settings, PlayCircle, Briefcase, Lock } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 
 export default function AuditorDashboard() {
-  const [requests, setRequests] = useState<any[]>([]);
+  const [data, setData] = useState<any>({ stats: null, investigations: [], timeline: [] });
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const supabase = createClient();
-    const fetchWires = async () => {
+    const fetchAuditData = async () => {
       try {
         const cacheBuster = new Date().getTime();
-        const res = await fetch(`/api/wires?t=${cacheBuster}`, { cache: 'no-store' });
+        const res = await fetch(`/api/audit/master?t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
-        if (json.success) setRequests(json.data);
+        if (json.success) setData(json);
       } catch (err) {} finally { setIsLoading(false); }
     };
-    fetchWires();
+    fetchAuditData();
   }, []);
 
-  const filteredRequests = requests.filter(req => 
-    req.vendor_name_snapshot.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    req.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    req.status.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  if (isLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
   return (
-    <div className="max-w-6xl mx-auto mt-10 px-4 sm:px-6 lg:px-8 space-y-6">
-      <div className="bg-slate-900 text-white p-6 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
-        <div className="flex items-center gap-3">
-          <ShieldCheck size={32} className="text-emerald-400" />
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Compliance & Investigation Center</h1>
-            <p className="text-slate-400 text-sm">Forensic audit logs, timelines, and SOC 2 evidence</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-blue-600 mb-2 font-bold uppercase tracking-wider text-xs">
+            <ShieldCheck size={16} /> Read-Only Compliance View
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 px-4 py-2 rounded-lg text-sm font-medium">
-            <Download size={16} className="text-slate-300" /> Export CSV
-          </button>
-          <div className="text-sm font-medium bg-emerald-900/50 text-emerald-200 border border-emerald-800/50 px-4 py-2 rounded-lg uppercase">
-            Role: AUDITOR (Read Only)
-          </div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Enterprise Investigation Center</h1>
+          <p className="text-slate-500 mt-1">Manage fraud cases, forensic replay, and automated risk workflows.</p>
         </div>
       </div>
-      
-      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <h2 className="text-xl font-bold text-slate-900">Enterprise Audit Log</h2>
-          
-          <div className="flex w-full md:w-auto items-center gap-3">
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search Vendor, ID, or Status..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-              />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-red-50 text-red-600 rounded-lg"><AlertTriangle size={24}/></div>
+          <div><p className="text-sm font-bold text-slate-500 uppercase">Active Cases</p><p className="text-2xl font-bold text-slate-900">{data.stats?.openInvestigations || 0}</p></div>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-slate-100 text-slate-600 rounded-lg"><Briefcase size={24}/></div>
+          <div><p className="text-sm font-bold text-slate-500 uppercase">Total Logged Cases</p><p className="text-2xl font-bold text-slate-900">{data.stats?.totalInvestigations || 0}</p></div>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg"><Settings size={24}/></div>
+          <div><p className="text-sm font-bold text-slate-500 uppercase">Policy Changes</p><p className="text-2xl font-bold text-slate-900">{data.stats?.policyChanges || 0}</p></div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* Left Column: Database-Backed Cases */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[600px]">
+            <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="font-bold text-slate-900 flex items-center gap-2"><Briefcase size={18} className="text-slate-600"/> Case Management</h2>
             </div>
-            <button className="bg-slate-100 p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-200">
-              <Filter size={18} />
-            </button>
+            <div className="overflow-y-auto flex-1 p-2 space-y-2 bg-slate-50">
+              {data.investigations.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-sm">No cases found.</div>
+              ) : data.investigations.map((inv: any) => (
+                <Link href={`/auditor-dashboard/investigations/${inv.id}`} key={inv.id} className="block bg-white p-4 rounded-lg border border-slate-200 shadow-sm hover:border-blue-400 transition-colors">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-[10px] font-bold text-slate-500 font-mono">{inv.case_number}</span>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${inv.status === 'resolved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700 border border-red-200'}`}>{inv.status}</span>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm mb-1">{inv.title}</h3>
+                  <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100">
+                    <span className="text-[10px] font-medium text-slate-400">{new Date(inv.date).toLocaleDateString()}</span>
+                    <span className="text-xs font-bold text-blue-600 flex items-center gap-1">Open Case <PlayCircle size={14}/></span>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
-              <tr>
-                <th className="px-6 py-4">Forensic Timeline</th>
-                <th className="px-6 py-4">Evidence</th>
-                <th className="px-6 py-4">Target Vendor</th>
-                <th className="px-6 py-4">Amount</th>
-                <th className="px-6 py-4">Risk Level</th>
-                <th className="px-6 py-4">Final Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {isLoading ? <tr><td colSpan={6} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" /></td></tr> : 
-               filteredRequests.length === 0 ? <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No records found.</td></tr> : 
-               filteredRequests.map((req) => (
-                  <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      {/* The Activity Replay Button */}
-                      <Link href={`/auditor-dashboard/investigations/${req.id}`} className="flex items-center gap-1.5 font-semibold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded border border-purple-100 transition-colors w-max">
-                        <PlayCircle size={14} /> Activity Replay
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 font-mono text-xs">
-                      <a href={`/api/pdf/${req.id}`} target="_blank" className="flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 underline">View PDF <ExternalLink size={12} /></a>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-900">{req.vendor_name_snapshot}</td>
-                    <td className="px-6 py-4 text-slate-900 font-semibold">${Number(req.amount).toLocaleString()}</td>
-                    <td className="px-6 py-4">
-                      {req.risk_score >= 90 ? <span className="text-red-600 font-bold">{req.risk_score} (CRITICAL)</span> : 
-                       req.risk_score >= 50 ? <span className="text-amber-600 font-semibold">{req.risk_score} (HIGH)</span> : 
-                       <span className="text-emerald-600">{req.risk_score} (LOW)</span>}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-medium uppercase tracking-wider">{req.status}</span>
-                    </td>
-                  </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* Right Column: Global Unified Timeline */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-[600px] flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/50">
+              <FileDigit size={18} className="text-blue-500"/>
+              <h2 className="font-bold text-slate-900">Live Immutable Audit Stream</h2>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold uppercase text-xs sticky top-0">
+                  <tr><th className="px-6 py-3">Timestamp</th><th className="px-6 py-3">Event</th><th className="px-6 py-3">Actor</th><th className="px-6 py-3">Details</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.timeline.map((e: any) => (
+                    <tr key={e.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-3 whitespace-nowrap text-xs font-medium text-slate-500">{new Date(e.timestamp).toLocaleString()}</td>
+                      <td className="px-6 py-3"><span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-slate-200 bg-white">{e.title}</span></td>
+                      <td className="px-6 py-3"><div className="font-semibold text-slate-900">{e.actorName}</div><div className="text-[10px] text-slate-500 uppercase">{e.actorRole}</div></td>
+                      <td className="px-6 py-3"><div className="text-sm text-slate-700 line-clamp-2">{e.message}</div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
