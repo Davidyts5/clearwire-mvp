@@ -39,6 +39,8 @@ export default function ControllerDashboard() {
     searchKeys: ['vendor_name_snapshot', 'purpose', 'id'],
     statuses: [
       { label: 'Pending Auth', value: 'pending' },
+      { label: 'Pending 2nd Auth', value: 'pending_second_approval' },
+      { label: 'Pending Exec', value: 'pending_cfo' },
       { label: 'Frozen', value: 'frozen' },
       { label: 'Under Review', value: 'under_review' },
       { label: 'Approved', value: 'approved' },
@@ -55,7 +57,7 @@ export default function ControllerDashboard() {
     showAmountFilter: true 
   };
 
-  const pendingCount = requests.filter(r => (r.status === 'pending' || r.status === 'frozen') && r.amount <= limit).length;
+  const pendingCount = requests.filter(r => (r.status === 'pending' || r.status === 'pending_second_approval' || r.status === 'frozen') && r.amount <= limit).length;
 
   return (
     <div className="max-w-5xl mx-auto mt-10 px-4 sm:px-6 lg:px-8">
@@ -91,7 +93,7 @@ export default function ControllerDashboard() {
               {isLoading ? <tr><td colSpan={4} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" /></td></tr> : 
                filteredRequests.length === 0 ? <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500 font-medium bg-slate-50">No wires match criteria.</td></tr> : 
                filteredRequests.map((req) => {
-                 const canApprove = (req.status === 'pending' || req.status === 'frozen') && req.amount <= limit;
+                 const canApprove = (req.status === 'pending' || req.status === 'pending_second_approval' || req.status === 'frozen') && req.amount <= limit;
                  return (
                   <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${canApprove ? 'bg-blue-50/30' : ''}`}>
                     <td className="px-6 py-4 font-mono text-xs">

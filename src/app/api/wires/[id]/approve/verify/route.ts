@@ -74,13 +74,40 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature || 'fallback_hash').digest('hex');
 
-      // 1. ATOMIC STATE MACHINE
+      
+      // 1. ATOMIC STATE MACHINE (Multi-Sig Aware)
       const adminClient = await getAdminClient();
+
+      // We need to fetch the company settings to know if this wire requires dual control
+      const { data: settings } = await adminClient.from('company_settings').select('approval_tiers').eq('company_id', auth.companyId).single();
+      
+      let requiresSecondApproval = false;
+      let requiresCFO = false;
+      
+      if (settings?.approval_tiers) {
+        const tier1Max = settings.approval_tiers.tier1?.max || 10000;
+        const tier2Max = settings.approval_tiers.tier2?.max || 100000;
+        
+        if (wireData.amount > tier2Max) {
+          requiresCFO = true; // Way over the limit, CFO must explicitly sign
+        } else if (wireData.amount > tier1Max) {
+          requiresSecondApproval = true; // Over the single-controller limit, needs two independent controllers
+        }
+      }
+
+      // If the current user IS the CFO, their signature trumps the requirements and instantly finalizes it.
+      if (auth.role === ROLES.CFO) {
+        requiresSecondApproval = false;
+        requiresCFO = false;
+      }
+
       const { data: updatedWire, error: rpcError } = await adminClient.rpc('transition_wire_state', {
         p_wire_id: params.id,
         p_new_status: 'approved',
         p_actor_id: auth.userId,
-        p_crypto_hash: `0x${fidoSignatureHash}`
+        p_crypto_hash: `0x${fidoSignatureHash}`,
+        p_requires_second_approval: requiresSecondApproval,
+        p_requires_cfo_approval: requiresCFO
       });
 
       if (rpcError) throw new Error(rpcError.message);

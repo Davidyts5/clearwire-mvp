@@ -43,7 +43,7 @@ export const PUT = withAuth([ROLES.CFO], async (req, ctx, auth) => {
     if (body.controller_limit !== undefined) {
       updatePayload.approval_tiers = {
         tier1: { max: Number(body.controller_limit), role: "controller" },
-        tier2: { max: 100000, role: "cfo" },
+        tier2: { max: body.tier2_limit !== undefined ? Number(body.tier2_limit) : 100000, role: "cfo" },
         tier3: { max: null, role: "multi-sig" }
       };
     }

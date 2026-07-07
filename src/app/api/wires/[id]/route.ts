@@ -25,8 +25,9 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
       
       const withinDollarLimit = data.amount <= controllerLimit;
       const allowedByRiskStatus = data.status !== 'frozen' || canUnfreeze;
+      const allowedByMultiSig = data.status === 'pending' || data.status === 'pending_second_approval' || data.status === 'frozen';
       
-      isControllerAuthorized = withinDollarLimit && allowedByRiskStatus;
+      isControllerAuthorized = withinDollarLimit && allowedByRiskStatus && allowedByMultiSig;
     }
 
     const canApprove = isCFO || isControllerAuthorized;
