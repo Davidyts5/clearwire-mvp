@@ -1,5 +1,0 @@
--- V12 MIGRATION: Vendor Management Extension
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS country TEXT;
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS currency TEXT;
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS contact_email TEXT;
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
