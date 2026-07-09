@@ -5,12 +5,9 @@ import { getAdminClient } from '@/lib/api-auth';
 export async function GET() {
   try {
     const admin = await getAdminClient();
-    const { data, error } = await admin.rpc('run_sql', { query: "SELECT column_name FROM information_schema.columns WHERE table_name = 'vendors';" });
-    if (error) {
-      const { data: q2, error: e2 } = await admin.from('vendors').select('*').order('created_at', { ascending: false }).limit(2);
-      return NextResponse.json({ fallback: q2, e2 });
-    }
-    return NextResponse.json({ columns: data });
+    const { data: q1, error: e1 } = await admin.from('user_authenticators').select('*').limit(1);
+    const { data: q2, error: e2 } = await admin.from('users').select('*').limit(1);
+    return NextResponse.json({ auth: { q1, e1 }, users: { q2, e2 } });
   } catch (err: any) {
     return NextResponse.json({ error: err.message });
   }

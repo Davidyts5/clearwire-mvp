@@ -22,7 +22,7 @@ export default function ProfilePage() {
 
       const res = await fetch(`/api/auth/devices?t=${Date.now()}`);
       const json = await res.json();
-      if (json.success) setDevices(json.data);
+      if (json.success) setDevices(json.data || []);
     } catch (err) {} finally { setIsLoading(false); }
   };
 
@@ -62,7 +62,7 @@ export default function ProfilePage() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex items-start gap-4">
           <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold text-2xl">
-            {user?.full_name?.charAt(0) || 'U'}
+            {user?.full_name ? String(user.full_name).charAt(0) : 'U'}
           </div>
           <div>
             <h2 className="text-2xl font-bold text-slate-900">{user?.full_name}</h2>
