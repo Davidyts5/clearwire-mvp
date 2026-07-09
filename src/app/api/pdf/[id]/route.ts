@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 import { ROLE_VALUES } from '@/lib/roles';

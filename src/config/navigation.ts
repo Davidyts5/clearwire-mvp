@@ -1,5 +1,6 @@
 import { 
-  Activity, 
+  Activity,
+  UserCircle, 
   Building2, 
   ListTodo,
   CheckSquare,

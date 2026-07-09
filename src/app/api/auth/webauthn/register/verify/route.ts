@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { rpName, getRpId, getOrigin, uint8ArrayToBase64 } from '@/lib/webauthn';
