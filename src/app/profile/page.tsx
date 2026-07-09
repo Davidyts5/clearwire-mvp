@@ -121,7 +121,7 @@ export default function ProfilePage() {
                       <p className="text-xs text-slate-500 font-mono mt-1">ID: {device.id}</p>
                       <div className="flex gap-4 mt-2">
                         <span className="text-[10px] uppercase font-bold text-slate-400">Created: {new Date(device.created_at).toLocaleDateString()}</span>
-                        <span className="text-[10px] uppercase font-bold text-slate-400">Last Used: {new Date(device.last_used_at).toLocaleDateString()}</span>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Last Used: {device.last_used_at ? new Date(device.last_used_at).toLocaleDateString() : "Never"}</span>
                       </div>
                     </div>
                   </div>
