@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { UserCircle, Fingerprint, ShieldAlert, Trash2, Edit2, Check, X, ShieldCheck, Loader2 } from "lucide-react";
+import { User, Fingerprint, ShieldAlert, Trash2, Edit2, Check, X, ShieldCheck, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 
 export default function ProfilePage() {
@@ -54,7 +54,7 @@ export default function ProfilePage() {
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <UserCircle className="text-blue-600" size={32} /> Security Profile
+          <User className="text-blue-600" size={32} /> Security Profile
         </h1>
         <p className="text-slate-500 mt-1">Manage your identity and cryptographic authenticators.</p>
       </div>
