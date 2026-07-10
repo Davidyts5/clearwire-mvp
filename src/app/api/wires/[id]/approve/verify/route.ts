@@ -70,7 +70,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
         updatedCounter = verification.authenticationInfo.newCounter;
       }
 
-      await auth.supabase.from('user_authenticators').update({ counter: updatedCounter, last_used_at: new Date().toISOString() }).eq('id', authenticator.id);
+      await auth.supabase.from('user_authenticators').update({ counter: updatedCounter }).eq('id', authenticator.id);
       await auth.supabase.from('webauthn_challenges').delete().eq('id', challengeData.id);
 
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature || 'fallback_hash').digest('hex');
