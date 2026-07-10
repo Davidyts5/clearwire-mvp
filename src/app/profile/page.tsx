@@ -1,14 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Monitor } from "lucide-react";
+import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Monitor, Trash2, Edit2, Check, X } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { startRegistration } from "@simplewebauthn/browser";
+import { Permissions } from "@/lib/roles";
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [devices, setDevices] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -39,6 +44,54 @@ export default function ProfilePage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const handleRegister = async () => {
+    setIsRegistering(true);
+    setError(null);
+    setRegisterSuccess(null);
+    
+    try {
+      // 1. Generate options
+      const genRes = await fetch('/api/auth/webauthn/register/generate', { cache: 'no-store' });
+      const genJson = await genRes.json();
+      
+      if (!genRes.ok) {
+        throw new Error(genJson.error || "Failed to start registration.");
+      }
+
+      // 2. Browser authentication ceremony
+      let attResp;
+      try {
+        attResp = await startRegistration(genJson);
+      } catch (err: any) {
+        if (err.name === 'NotAllowedError') {
+          throw new Error("Registration was cancelled or timed out.");
+        }
+        throw new Error("Hardware key or biometric registration failed.");
+      }
+
+      // 3. Verify
+      const verifyRes = await fetch('/api/auth/webauthn/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attResp),
+      });
+      const verifyJson = await verifyRes.json();
+
+      if (!verifyRes.ok) {
+        throw new Error(verifyJson.error || "Failed to securely verify the device.");
+      }
+
+      // 4. Success
+      setRegisterSuccess("New security device registered successfully.");
+      fetchData(); // refresh list
+      
+    } catch (err: any) {
+      setError(err.message || "An error occurred during registration.");
+    } finally {
+      setIsRegistering(false);
+    }
+  };
 
   if (isLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
@@ -76,9 +129,29 @@ export default function ProfilePage() {
             </h2>
             <p className="text-sm text-slate-500">Hardware keys authorized to cryptographically sign wire transfers.</p>
           </div>
+          
+          {user && Permissions.canRegisterDevice(user.role) && (
+            <button 
+              onClick={handleRegister} 
+              disabled={isRegistering}
+              className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              {isRegistering ? <Loader2 size={16} className="animate-spin" /> : <span className="text-lg leading-none">+</span>}
+              Register New Device
+            </button>
+          )}
         </div>
         
         <div className="p-0">
+          {registerSuccess && (
+            <div className="m-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                <ShieldCheck size={18} /> {registerSuccess}
+              </div>
+              <button onClick={() => setRegisterSuccess(null)} className="text-emerald-600 hover:text-emerald-800"><X size={16}/></button>
+            </div>
+          )}
+
           {error ? (
              <div className="p-8 text-center">
                <AlertTriangle className="mx-auto text-red-500 mb-3" size={32}/>
