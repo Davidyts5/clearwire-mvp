@@ -1,26 +1,17 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api-auth';
-import { ROLE_VALUES, ROLES } from '@/lib/roles';
+import { ROLE_VALUES } from '@/lib/roles';
 
-// GET all devices for a user (or all company devices if CFO)
 export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
   try {
-    const url = new URL(req.url);
-    const targetUserId = url.searchParams.get('userId');
+    const { data, error } = await auth.supabase
+      .from('user_authenticators')
+      .select('id, user_id, credential_id, credential_public_key as public_key, device_name, credential_device_type as device_type, created_at, last_used_at, revoked')
+      .eq('user_id', auth.userId)
+      .eq('revoked', false)
+      .order('created_at', { ascending: false });
 
-    // We will drop the users join to prevent RLS schema errors, 
-    // and manually map if CFO requests it, or just return straight devices for simple viewing
-    let query = auth.supabase.from('user_authenticators').select('id, name, created_at, last_used_at, transports, user_id');
-    
-    if (auth.role === ROLES.CFO && targetUserId) {
-      query = query.eq('user_id', targetUserId);
-    } else {
-      // Normal users can only see their own devices
-      query = query.eq('user_id', auth.userId);
-    }
-
-    const { data, error } = await query.order('last_used_at', { ascending: false });
     if (error) throw error;
 
     return NextResponse.json({ success: true, data });
