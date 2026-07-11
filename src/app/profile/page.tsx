@@ -12,8 +12,13 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  const [renamingDevice, setRenamingDevice] = useState<any>(null);
+  const [newName, setNewName] = useState("");
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  
   const [isRegistering, setIsRegistering] = useState(false);
-  const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -45,10 +50,48 @@ export default function ProfilePage() {
 
   useEffect(() => { fetchData(); }, []);
 
+  
+  const handleRenameSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRenameError(null);
+    const trimmedName = newName.trim();
+    
+    if (!trimmedName) {
+      setRenameError("Device name cannot be empty.");
+      return;
+    }
+    if (trimmedName.length > 50) {
+      setRenameError("Device name cannot exceed 50 characters.");
+      return;
+    }
+
+    setIsRenaming(true);
+    try {
+      const res = await fetch(`/api/auth/devices/${renamingDevice.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_name: trimmedName })
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to rename device.");
+      }
+
+      setSuccessMessage("Device renamed successfully.");
+      setRenamingDevice(null);
+      fetchData(); // refresh list
+    } catch (err: any) {
+      setRenameError(err.message || "An error occurred while renaming.");
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
   const handleRegister = async () => {
     setIsRegistering(true);
     setError(null);
-    setRegisterSuccess(null);
+    setSuccessMessage(null);
     
     try {
       // 1. Generate options
@@ -83,7 +126,7 @@ export default function ProfilePage() {
       }
 
       // 4. Success
-      setRegisterSuccess("New security device registered successfully.");
+      setSuccessMessage("New security device registered successfully.");
       fetchData(); // refresh list
       
     } catch (err: any) {
@@ -143,12 +186,12 @@ export default function ProfilePage() {
         </div>
         
         <div className="p-0">
-          {registerSuccess && (
+          {successMessage && (
             <div className="m-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-800 font-bold">
-                <ShieldCheck size={18} /> {registerSuccess}
+                <ShieldCheck size={18} /> {successMessage}
               </div>
-              <button onClick={() => setRegisterSuccess(null)} className="text-emerald-600 hover:text-emerald-800"><X size={16}/></button>
+              <button onClick={() => setSuccessMessage(null)} className="text-emerald-600 hover:text-emerald-800"><X size={16}/></button>
             </div>
           )}
 
@@ -189,12 +232,61 @@ export default function ProfilePage() {
                       </div>
                     </div>
                   </div>
+                  {!device.revoked && (
+                    <button 
+                      onClick={() => { setRenamingDevice(device); setNewName(device.device_name || "Security Key"); setRenameError(null); }}
+                      className="text-sm font-semibold text-slate-400 hover:text-blue-600 transition-colors px-3 py-1.5 border border-transparent hover:border-blue-200 hover:bg-blue-50 rounded-lg"
+                    >
+                      Rename
+                    </button>
+                  )}
                 </li>
+
               ))}
             </ul>
           )}
         </div>
       </div>
+
+      {renamingDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Edit2 size={20} className="text-blue-500" /> Rename Device</h2>
+              <button onClick={() => setRenamingDevice(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleRenameSubmit} className="p-6 space-y-4">
+              {renameError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm flex items-start gap-2">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <span>{renameError}</span>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Friendly Name</label>
+                <input 
+                  type="text" 
+                  autoFocus
+                  required
+                  maxLength={50}
+                  value={newName} 
+                  onChange={(e) => setNewName(e.target.value)} 
+                  className="w-full border p-2 rounded outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. David's MacBook"
+                />
+                <p className="text-xs text-slate-500 mt-2">Current name: <span className="font-mono">{renamingDevice.device_name}</span></p>
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button type="button" onClick={() => setRenamingDevice(null)} className="px-4 py-2 font-medium text-slate-600 hover:text-slate-900 text-sm">Cancel</button>
+                <button type="submit" disabled={isRenaming} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2 transition-colors">
+                  {isRenaming ? <Loader2 size={16} className="animate-spin" /> : "Save Name"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
+
 }
