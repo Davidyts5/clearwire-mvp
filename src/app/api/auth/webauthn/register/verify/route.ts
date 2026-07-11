@@ -6,7 +6,10 @@ import { withAuth } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 
 export const POST = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, auth) => {
-  const body = await req.json();
+  const rawBody = await req.json();
+  // Handle both old and new payload structures securely
+  const body = rawBody.response ? rawBody.response : rawBody;
+  const metadata = rawBody.metadata || null;
 
   const { data: challengeData, error: fetchError } = await auth.supabase
     .from('webauthn_challenges')
@@ -42,7 +45,11 @@ export const POST = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, aut
         counter: counter,
         credential_device_type: credentialDeviceType,
         credential_backed_up: credentialBackedUp,
-        transports: body.response.transports || []
+        transports: body.response.transports || [],
+        device_name: metadata ? `${metadata.browser} on ${metadata.os}` : 'Security Key',
+        browser: metadata?.browser || 'Unknown Browser',
+        os: metadata?.os || 'Unknown Device',
+        form_factor: metadata?.formFactor || 'Desktop'
       }]);
 
       if (insertError) {

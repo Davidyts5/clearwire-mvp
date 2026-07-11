@@ -5,6 +5,7 @@ import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Mo
 import { createClient } from "@/lib/supabase";
 import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 import { Permissions } from "@/lib/roles";
+import { getDeviceMetadata } from "@/lib/device-utils";
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
@@ -120,7 +121,7 @@ export default function ProfilePage() {
       const verifyRes = await fetch('/api/auth/webauthn/register/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(attResp),
+        body: JSON.stringify({ response: attResp, metadata: getDeviceMetadata() }),
       });
       const verifyJson = await verifyRes.json();
 
@@ -220,6 +221,7 @@ export default function ProfilePage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
+                        <ShieldCheck size={14} className="text-slate-400" />
                         <h3 className="font-bold text-slate-900">{device.device_name || 'Security Key'}</h3>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${device.revoked ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
                           {device.revoked ? 'Revoked' : 'Active'}
@@ -227,9 +229,9 @@ export default function ProfilePage() {
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <Monitor size={12} className="text-slate-400" />
-                        <span className="text-xs text-slate-500">{device.device_type || 'Unknown Type'}</span>
+                        <span className="text-xs font-semibold text-slate-600">{device.browser || 'Unknown Browser'} &bull; {device.os || 'Unknown Device'}</span>
                       </div>
-                      <div className="flex gap-4 mt-2">
+                      <div className="flex flex-wrap gap-4 mt-2">
                         <span className="text-[10px] uppercase font-bold text-slate-400">Created: {new Date(device.created_at).toLocaleDateString()}</span>
                         <span className="text-[10px] uppercase font-bold text-slate-400">Last Used: {device.last_used_at ? new Date(device.last_used_at).toLocaleDateString() : "Never"}</span>
                         {device.revoked && device.revoked_at && (
@@ -239,12 +241,20 @@ export default function ProfilePage() {
                     </div>
                   </div>
                   {!device.revoked && (
-                    <button 
-                      onClick={() => { setRenamingDevice(device); setNewName(device.device_name || "Security Key"); setRenameError(null); }}
-                      className="text-sm font-semibold text-slate-400 hover:text-blue-600 transition-colors px-3 py-1.5 border border-transparent hover:border-blue-200 hover:bg-blue-50 rounded-lg"
-                    >
-                      Rename
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => { setRenamingDevice(device); setNewName(device.device_name || "Security Key"); setRenameError(null); }}
+                        className="text-sm font-semibold text-slate-400 hover:text-blue-600 transition-colors px-3 py-1.5 border border-transparent hover:border-blue-200 hover:bg-blue-50 rounded-lg"
+                      >
+                        Rename
+                      </button>
+                      <button 
+                        onClick={() => { setRevokingDevice(device); setRevokeError(null); }}
+                        className="text-sm font-semibold text-slate-400 hover:text-red-600 transition-colors px-3 py-1.5 border border-transparent hover:border-red-200 hover:bg-red-50 rounded-lg"
+                      >
+                        Revoke
+                      </button>
+                    </div>
                   )}
                 </li>
 
