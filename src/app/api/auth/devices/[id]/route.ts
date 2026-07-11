@@ -35,28 +35,3 @@ export const PATCH = withAuth([...ROLE_VALUES], async (req, { params }, auth) =>
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 });
-
-export const DELETE = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
-  try {
-    const { data: device, error: fetchError } = await auth.supabase
-      .from('user_authenticators')
-      .select('user_id')
-      .eq('id', params.id)
-      .single();
-
-    if (fetchError || !device) return NextResponse.json({ error: 'Device not found' }, { status: 404 });
-    if (device.user_id !== auth.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-
-    // Soft Revoke
-    const { error } = await auth.supabase
-      .from('user_authenticators')
-      .update({ revoked: true })
-      .eq('id', params.id);
-
-    if (error) throw error;
-
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-});

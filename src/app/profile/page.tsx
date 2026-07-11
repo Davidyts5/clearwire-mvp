@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Monitor, Trash2, Edit2, Check, X } from "lucide-react";
 import { createClient } from "@/lib/supabase";
-import { startRegistration } from "@simplewebauthn/browser";
+import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 import { Permissions } from "@/lib/roles";
 
 export default function ProfilePage() {
@@ -18,6 +18,9 @@ export default function ProfilePage() {
   const [renameError, setRenameError] = useState<string | null>(null);
   
   const [isRegistering, setIsRegistering] = useState(false);
+  const [revokingDevice, setRevokingDevice] = useState<any>(null);
+  const [isRevoking, setIsRevoking] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -229,6 +232,9 @@ export default function ProfilePage() {
                       <div className="flex gap-4 mt-2">
                         <span className="text-[10px] uppercase font-bold text-slate-400">Created: {new Date(device.created_at).toLocaleDateString()}</span>
                         <span className="text-[10px] uppercase font-bold text-slate-400">Last Used: {device.last_used_at ? new Date(device.last_used_at).toLocaleDateString() : "Never"}</span>
+                        {device.revoked && device.revoked_at && (
+                          <span className="text-[10px] uppercase font-bold text-red-500">Revoked Date: {new Date(device.revoked_at).toLocaleDateString()}</span>
+                        )}
                       </div>
                     </div>
                   </div>
