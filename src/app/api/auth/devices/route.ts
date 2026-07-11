@@ -7,7 +7,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
   try {
     const { data, error } = await auth.supabase
       .from('user_authenticators')
-      .select('id, user_id, credential_id, credential_public_key as public_key, device_name, credential_device_type as device_type, created_at, last_used_at, revoked')
+      .select('id, user_id, credential_id, public_key:credential_public_key, device_name, device_type:credential_device_type, created_at, last_used_at, revoked')
       .eq('user_id', auth.userId)
       .eq('revoked', false)
       .order('created_at', { ascending: false });
