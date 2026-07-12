@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
-import { getRpId, getOrigin } from '@/lib/webauthn';
+import { getRpId, getOrigin, base64ToUint8Array } from '@/lib/webauthn';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLE_VALUES, ROLES } from '@/lib/roles';
 
@@ -49,15 +49,18 @@ export const POST = withAuth([...ROLE_VALUES], async (req, { params }, auth) => 
 
     if (!authenticator) return NextResponse.json({ error: 'Authenticator not found' }, { status: 400 });
 
+    const currentCounter = authenticator.counter != null ? Number(authenticator.counter) : 0;
+
     const verification = await verifyAuthenticationResponse({
       response: body,
       expectedChallenge: challengeData.challenge,
       expectedOrigin: getOrigin(req),
       expectedRPID: getRpId(req),
-      authenticator: {
-        credentialID: authenticator.credential_id,
-        credentialPublicKey: Buffer.from(authenticator.credential_public_key, 'base64'),
-        counter: Number(authenticator.counter),
+      credential: {
+        id: authenticator.credential_id,
+        publicKey: base64ToUint8Array(authenticator.credential_public_key),
+        counter: currentCounter,
+        transports: authenticator.transports || [],
       },
     });
 
