@@ -92,6 +92,44 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRevokeSubmit = async () => {
+    setIsRevoking(true);
+    setRevokeError(null);
+    try {
+      // 1. Generate challenge
+      const genRes = await fetch(`/api/auth/devices/${revokingDevice.id}/revoke/generate`, { cache: 'no-store' });
+      const genJson = await genRes.json();
+      if (!genRes.ok) throw new Error(genJson.error || "Failed to start revocation authentication.");
+
+      // 2. Browser ceremony
+      let attResp;
+      try {
+        attResp = await startAuthentication(genJson);
+      } catch (err: any) {
+        if (err.name === 'NotAllowedError') throw new Error("Authentication was cancelled or timed out.");
+        throw new Error("Hardware key verification failed.");
+      }
+
+      // 3. Verify and Revoke
+      const verifyRes = await fetch(`/api/auth/devices/${revokingDevice.id}/revoke/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attResp),
+      });
+      const verifyJson = await verifyRes.json();
+
+      if (!verifyRes.ok) throw new Error(verifyJson.error || "Failed to securely revoke device.");
+
+      setSuccessMessage("Device revoked successfully.");
+      setRevokingDevice(null);
+      fetchData();
+    } catch (err: any) {
+      setRevokeError(err.message || "An error occurred during revocation.");
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
   const handleRegister = async () => {
     setIsRegistering(true);
     setError(null);
@@ -302,7 +340,43 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+
+      {revokingDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-red-600"><ShieldAlert size={20} /> Revoke Security Device</h2>
+              <button onClick={() => setRevokingDevice(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm font-medium text-slate-700">
+                Revoking this device will immediately prevent it from being used for future authentication and cryptographic approvals. This action is recorded in the audit log.
+              </p>
+              
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <span className="block text-xs font-bold text-slate-400 uppercase">Device to Revoke</span>
+                <span className="font-bold text-slate-900">{revokingDevice.device_name || 'Security Key'}</span>
+              </div>
+
+              {revokeError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm flex items-start gap-2">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <span>{revokeError}</span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button onClick={() => setRevokingDevice(null)} className="px-4 py-2 font-medium text-slate-600 hover:text-slate-900 text-sm">Cancel</button>
+                <button onClick={handleRevokeSubmit} disabled={isRevoking} className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2 transition-colors">
+                  {isRevoking ? <Loader2 size={16} className="animate-spin" /> : <Fingerprint size={16} />}
+                  {isRevoking ? "Verifying..." : "Revoke Device"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
-
 }
