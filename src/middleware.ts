@@ -37,7 +37,7 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   if (path === '/') return response;
 
-  const isAuthRoute = path.startsWith('/login');
+  const isAuthRoute = path.startsWith('/login') || path.startsWith('/signup');
   const isInviteRoute = path.startsWith('/invite');
   
   // Public static assets

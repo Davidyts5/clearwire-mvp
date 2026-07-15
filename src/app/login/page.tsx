@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ShieldCheck, Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase"; 
+import { createClient } from "@/lib/supabase";
+import Link from "next/link"; 
 import { ROLES, Permissions } from "@/lib/roles";
 
 export default function Login() {
@@ -109,6 +110,12 @@ export default function Login() {
               </button>
             </div>
           </form>
+        </div>
+
+        <div className="mt-8 text-center space-y-2">
+          <p className="text-slate-500 text-sm">
+            Not part of a workspace yet? <Link href="/signup" className="font-bold text-blue-600 hover:underline">Create Company</Link>
+          </p>
         </div>
       </div>
     </div>
