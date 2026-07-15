@@ -5,7 +5,12 @@ import { LogOut, Loader2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase"; 
 
-export default function SessionManager() {
+interface SessionManagerProps {
+  collapsed?: boolean;
+  showBadge?: boolean;
+}
+
+export default function SessionManager({ collapsed = false, showBadge = true }: SessionManagerProps) {
   const pathname = usePathname();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const isAuthRoute = pathname === '/login' || pathname === '/';
@@ -14,14 +19,9 @@ export default function SessionManager() {
     setIsLoggingOut(true);
     try {
       const supabase = createClient();
-      
-      // 1. Tell Supabase to kill the session on the backend
       await supabase.auth.signOut();
       
-      // 2. Eradicate ALL possible Supabase cookie formats 
-      // Supabase recently updated their cookie chunks (e.g., sb-xxx-auth-token.0)
       const domains = [window.location.hostname, `.${window.location.hostname}`];
-      
       domains.forEach(domain => {
         const cookies = document.cookie.split(";");
         cookies.forEach(cookie => {
@@ -33,7 +33,6 @@ export default function SessionManager() {
         });
       });
       
-      // 3. Force hard redirect to login
       window.location.href = '/login';
     } catch (e) {
       console.error("Logout failed", e);
@@ -71,18 +70,23 @@ export default function SessionManager() {
   }
 
   return (
-    <div className="flex items-center gap-4 z-50">
-      <div className="hidden sm:flex items-center gap-2 text-emerald-400 text-xs font-semibold bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
-        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
-        Secure Session
-      </div>
+    <div className={`flex flex-col gap-3 z-50 w-full ${collapsed ? 'items-center lg:items-start group-hover:items-start' : ''}`}>
+      {showBadge && (
+        <div className={`flex items-center gap-2 text-emerald-400 text-xs font-semibold bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20 w-fit ${collapsed ? 'hidden lg:flex group-hover:flex' : ''}`}>
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+          <span>Secure Session</span>
+        </div>
+      )}
       <button 
         onClick={handleLogout} 
         disabled={isLoggingOut}
-        className="flex items-center gap-1.5 text-sm font-medium text-slate-300 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 shadow-sm disabled:opacity-50 cursor-pointer"
+        title="Logout"
+        className={`flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 p-2 lg:px-3 lg:py-2 rounded-lg border border-slate-700 shadow-sm disabled:opacity-50 cursor-pointer w-full ${collapsed ? 'justify-center lg:justify-start group-hover:justify-start group-hover:px-3 group-hover:py-2' : 'justify-start px-3 py-2'}`}
       >
-        {isLoggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />} 
-        {isLoggingOut ? "Logging out..." : "Logout"}
+        {isLoggingOut ? <Loader2 size={18} className="animate-spin shrink-0" /> : <LogOut size={18} className="shrink-0" />} 
+        <span className={`${collapsed ? 'hidden lg:block group-hover:block whitespace-nowrap' : 'block'}`}>
+          {isLoggingOut ? "Logging out..." : "Logout"}
+        </span>
       </button>
     </div>
   );
