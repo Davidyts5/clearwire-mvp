@@ -15,6 +15,7 @@ export default function LandingPage() {
             <a href="mailto:davidlucasonorigho@gmail.com?subject=ClearWire%20Demo%20Request" className="hidden md:block text-sm font-medium text-slate-400 hover:text-white transition-colors">
               Contact Sales
             </a>
+            <Link href="/signup" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold transition-all shadow-md mr-3">Create Workspace</Link>
             <Link href="/login" className="bg-white/10 hover:bg-white/20 border border-white/10 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm">
               Sign In
             </Link>
