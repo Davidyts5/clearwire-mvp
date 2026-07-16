@@ -51,7 +51,7 @@ export default function TeamManagement() {
       const json = await res.json();
       if (json.success) {
         setTeam(json.data.teamMembers);
-        setInvites(json.data.pendingInvites);
+        setInvites(json.data.teamInvites);
       }
     } catch (err) { console.error(err); } finally { setIsLoading(false); }
   };
