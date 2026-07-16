@@ -6,6 +6,7 @@ import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 
 const InviteSchema = z.object({
+  full_name: z.string().min(2, "Full name is required").max(100),
   email: z.string().email(),
   role: z.enum([ROLES.CLERK, ROLES.CONTROLLER, ROLES.CFO, ROLES.AUDITOR]),
   approval_limit: z.number().min(0).optional().default(0),
@@ -20,19 +21,24 @@ export const GET = withAuth([ROLES.CFO], async (req, ctx, auth) => {
       .eq('company_id', auth.companyId)
       .order('created_at', { ascending: true });
 
-    const { data: pendingInvites, error: invitesError } = await auth.supabase
+    // Extended to fetch all historical invites, not just pending
+    const { data: teamInvites, error: invitesError } = await auth.supabase
       .from('team_invites')
-      .select('id, email, role, approval_limit, can_unfreeze, status, expires_at, created_at')
+      .select('id, full_name, email, role, approval_limit, can_unfreeze, status, expires_at, created_at')
       .eq('company_id', auth.companyId)
-      .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
-    if (usersError || invitesError) throw new Error("Database fetch failed due to RLS or missing tables.");
+    if (usersError || invitesError) throw new Error("Database fetch failed.");
 
-    const headers = new Headers();
-    headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    // Filter dynamic states
+    const now = new Date();
+    teamInvites?.forEach((inv: any) => {
+      if (inv.status === 'pending' && new Date(inv.expires_at) < now) {
+        inv.status = 'expired'; // Dynamically flag expired ones
+      }
+    });
 
-    return NextResponse.json({ success: true, data: { teamMembers, pendingInvites } }, { status: 200, headers });
+    return NextResponse.json({ success: true, data: { teamMembers, teamInvites } });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -43,24 +49,59 @@ export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
     const body = await req.json();
     const parsed = InviteSchema.parse(body);
 
-    const { data: existingUser } = await auth.supabase.from('users').select('id').eq('company_id', auth.companyId).eq('email', parsed.email).single();
-    if (existingUser) return NextResponse.json({ error: 'User is already part of the team.' }, { status: 400 });
+    const adminClient = await getAdminClient();
 
+    // 1. Check if user already exists anywhere in the platform (Strict 1-to-1 enforcement)
+    const { data: existingUser } = await adminClient.from('users').select('id, company_id').eq('email', parsed.email).single();
+    if (existingUser) {
+      if (existingUser.company_id === auth.companyId) {
+        return NextResponse.json({ error: 'User is already part of your team.' }, { status: 400 });
+      } else {
+        return NextResponse.json({ error: 'This email is already registered to a workspace. Multi-workspace support is currently disabled.' }, { status: 400 });
+      }
+    }
+
+    // 2. Check if a pending invite already exists for this exact email in this company
+    const { data: existingInvite } = await auth.supabase
+      .from('team_invites')
+      .select('id')
+      .eq('company_id', auth.companyId)
+      .eq('email', parsed.email)
+      .eq('status', 'pending')
+      .single();
+
+    if (existingInvite) {
+      return NextResponse.json({ error: 'An active invitation is already pending for this email.' }, { status: 400 });
+    }
+
+    // 3. Generate token and create invite
     const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // Extends to 7 days instead of 48h
 
     const { data: invite, error: insertError } = await auth.supabase.from('team_invites').insert([{
       company_id: auth.companyId,
+      full_name: parsed.full_name,
       email: parsed.email,
       role: parsed.role,
       approval_limit: parsed.role === ROLES.CONTROLLER ? parsed.approval_limit : 0,
       can_unfreeze: parsed.role === ROLES.CONTROLLER ? parsed.can_unfreeze : false,
       invited_by: auth.userId,
       token: token,
-      expires_at: expiresAt
+      expires_at: expiresAt,
+      status: 'pending'
     }]).select().single();
 
-    if (insertError) return NextResponse.json({ error: 'An invite is already pending for this email.' }, { status: 400 });
+    if (insertError) throw insertError;
+
+    // 4. WORM Audit Log
+    await adminClient.from('audit_logs').insert([{
+      company_id: auth.companyId,
+      wire_id: '00000000-0000-0000-0000-000000000000',
+      actor_id: auth.userId,
+      action: 'INVITATION_CREATED',
+      new_hash: invite.id,
+      previous_hash: parsed.email
+    }]);
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
     const magicLink = `${siteUrl}/invite/${token}`;
