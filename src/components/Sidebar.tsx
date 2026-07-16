@@ -8,6 +8,7 @@ import { getNavItemsForRole } from "@/config/navigation";
 import { createClient } from "@/lib/supabase";
 import { Role } from "@/lib/roles";
 import SessionManager from "./SessionManager";
+import NotificationCenter from "./NotificationCenter";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -105,7 +106,7 @@ export default function Sidebar() {
             <span>ClearWire</span>
           </div>
         </div>
-        {/* We keep session manager hidden here to save space, but show badge if we want. We'll leave it hidden and let drawer handle logout. */}
+        <div className="flex items-center gap-3"><NotificationCenter /></div>
       </div>
 
       {/* Mobile Drawer Overlay */}
@@ -142,6 +143,7 @@ export default function Sidebar() {
         <NavList isMobile={false} />
         
         <div className="p-4 border-t border-slate-800 overflow-hidden shrink-0 flex flex-col items-center lg:items-start group-hover:items-start w-full">
+           <div className="w-full flex justify-center lg:justify-start group-hover:justify-start mb-4 px-2"><NotificationCenter /></div>
            <SessionManager showBadge={true} collapsed={true} />
         </div>
       </div>

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
 
 const InviteSchema = z.object({
   full_name: z.string().min(2, "Full name is required").max(100),
@@ -103,6 +104,16 @@ export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
       previous_hash: parsed.email
     }]);
 
+    
+    await createNotification(adminClient, {
+      companyId: auth.companyId,
+      userId: auth.userId,
+      type: NOTIFICATION_TYPES.INVITE_SENT,
+      title: 'Team Invitation Sent',
+      message: `You invited ${parsed.email} to join the workspace.`,
+      actionUrl: `/team`,
+      relatedInviteId: invite.id,
+    });
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
     const magicLink = `${siteUrl}/invite/${token}`;
 

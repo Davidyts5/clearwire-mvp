@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth, verifyTenantResource, verifySegregationOfDuties, getAdminClient } from '@/lib/api-auth';
 import { ROLES, ROLE_VALUES } from '@/lib/roles';
+import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
 
 export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   try {
@@ -74,6 +75,22 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
     });
 
     if (rpcError) throw new Error(rpcError.message);
+
+    if (newStatus === 'denied') {
+      const { data: wireClerk } = await adminClient.from('wire_requests').select('clerk_id, vendor_name_snapshot, amount').eq('id', params.id).single();
+      if (wireClerk) {
+        await createNotification(adminClient, {
+          companyId: auth.companyId,
+          userId: wireClerk.clerk_id,
+          type: NOTIFICATION_TYPES.WIRE_DENIED,
+          title: 'Wire Request Denied',
+          message: `Your wire request to ${wireClerk.vendor_name_snapshot} was denied by an executive.`,
+          actionUrl: `/approve/${params.id}`,
+          metadata: { wireAmount: wireClerk.amount, vendorName: wireClerk.vendor_name_snapshot },
+          relatedWireId: params.id,
+        });
+      }
+    }
     return NextResponse.json({ success: true, data: updatedWire });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

@@ -2,6 +2,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
+import { getAdminClient } from '@/lib/api-auth';
 
 export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, auth) => {
   try {
@@ -41,6 +43,18 @@ export const PUT = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
     const { error } = await auth.supabase.from('investigations').update(payload).eq('id', params.id);
     if (error) throw error;
 
+    
+    if (body.assigned_to) {
+      const adminClient = await getAdminClient();
+      await createNotification(adminClient, {
+        companyId: auth.companyId,
+        userId: body.assigned_to,
+        type: NOTIFICATION_TYPES.INVESTIGATION_ASSIGNED,
+        title: 'Investigation Assigned',
+        message: `You have been assigned to review case ${params.id}.`,
+        actionUrl: `/auditor-dashboard/investigations/${params.id}`,
+      });
+    }
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

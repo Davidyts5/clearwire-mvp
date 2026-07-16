@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import twilio from 'twilio';
 import { evaluateWireRisk } from '@/lib/risk-engine';
-import { withAuth } from '@/lib/api-auth';
+import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
+import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES, ROLE_VALUES } from '@/lib/roles';
 import { checkRateLimit } from '@/lib/rate-limit';
 
@@ -144,6 +145,41 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       } catch (e) {}
     }
 
+    
+    const adminClient = await getAdminClient();
+    if (riskAnalysis.recommendedStatus === 'frozen') {
+      const { data: cfoUsers } = await adminClient.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CFO);
+      if (cfoUsers) {
+        for (const cfo of cfoUsers) {
+          await createNotification(adminClient, {
+            companyId: auth.companyId,
+            userId: cfo.id,
+            type: NOTIFICATION_TYPES.WIRE_FROZEN,
+            title: 'Risk Engine Freeze',
+            message: `A wire to ${parsed.vendor} was automatically frozen. Risk Score: ${riskAnalysis.totalScore}`,
+            actionUrl: `/approve/${requestData.id}`,
+            metadata: { wireAmount: parsed.amount, vendorName: parsed.vendor, riskScore: riskAnalysis.totalScore },
+            relatedWireId: requestData.id,
+          });
+        }
+      }
+    } else {
+      const { data: controllers } = await adminClient.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CONTROLLER);
+      if (controllers) {
+        for (const c of controllers) {
+          await createNotification(adminClient, {
+            companyId: auth.companyId,
+            userId: c.id,
+            type: NOTIFICATION_TYPES.WIRE_PENDING_APPROVAL,
+            title: 'New Wire Request',
+            message: `A wire to ${parsed.vendor} is awaiting your signature.`,
+            actionUrl: `/approve/${requestData.id}`,
+            metadata: { wireAmount: parsed.amount, vendorName: parsed.vendor },
+            relatedWireId: requestData.id,
+          });
+        }
+      }
+    }
     return NextResponse.json({ success: true, data: requestData, risk: riskAnalysis });
   } catch (error: any) {
     return NextResponse.json({ error: 'Server error parsing request' }, { status: 500 });

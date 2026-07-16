@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { getRpId, getOrigin, base64ToUint8Array } from '@/lib/webauthn';
 import crypto from 'crypto';
+import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
 import { withAuth, verifyTenantResource, verifySegregationOfDuties, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 

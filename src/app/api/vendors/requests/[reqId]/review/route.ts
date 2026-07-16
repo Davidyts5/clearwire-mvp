@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 import { z } from 'zod';
+import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
 
 const ReviewSchema = z.object({
   action: z.enum(['approve', 'reject', 'escalate']),
@@ -125,6 +126,59 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       }]);
     }
 
+    
+    const { data: requestCreator } = await supabaseAdmin.from('users').select('id').eq('id', request.requested_by).single();
+    if (requestCreator) {
+      if (parsed.action === 'approve') {
+        await createNotification(supabaseAdmin, {
+          companyId: auth.companyId,
+          userId: requestCreator.id,
+          type: NOTIFICATION_TYPES.VENDOR_CHANGED,
+          title: 'Vendor Request Approved',
+          message: `Your change request was approved.`,
+          actionUrl: `/vendors/${request.vendor_id}`,
+          relatedVendorId: request.vendor_id,
+        });
+      } else if (parsed.action === 'reject') {
+        if (parsed.restrict_vendor && auth.role === ROLES.CFO) {
+          await createNotification(supabaseAdmin, {
+            companyId: auth.companyId,
+            userId: requestCreator.id,
+            type: NOTIFICATION_TYPES.VENDOR_FROZEN,
+            title: 'Vendor Restricted',
+            message: `Your vendor change request was rejected and the vendor was restricted by the CFO.`,
+            actionUrl: `/vendors/${request.vendor_id}`,
+            relatedVendorId: request.vendor_id,
+          });
+        } else {
+          await createNotification(supabaseAdmin, {
+            companyId: auth.companyId,
+            userId: requestCreator.id,
+            type: NOTIFICATION_TYPES.VENDOR_CHANGED,
+            title: 'Vendor Request Rejected',
+            message: `Your vendor change request was rejected.`,
+            actionUrl: `/vendors/${request.vendor_id}`,
+            relatedVendorId: request.vendor_id,
+          });
+        }
+      } else if (parsed.action === 'escalate') {
+        // Notify CFOs
+        const { data: cfoUsers } = await supabaseAdmin.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CFO);
+        if (cfoUsers) {
+          for (const cfo of cfoUsers) {
+            await createNotification(supabaseAdmin, {
+              companyId: auth.companyId,
+              userId: cfo.id,
+              type: NOTIFICATION_TYPES.VENDOR_CHANGED,
+              title: 'Vendor Request Escalated',
+              message: `A vendor change request was escalated for your review.`,
+              actionUrl: `/vendor-requests`,
+              relatedVendorId: request.vendor_id,
+            });
+          }
+        }
+      }
+    }
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
