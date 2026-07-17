@@ -66,6 +66,7 @@ export default function TeamManagement() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
+          full_name: fullName,
           email, 
           role,
           approval_limit: role === 'controller' ? approvalLimit : 0,
@@ -76,6 +77,7 @@ export default function TeamManagement() {
       if (json.success) {
         setMagicLink(json.magicLink);
         setEmail("");
+        setFullName("");
         fetchTeam(); 
       } else alert(json.error);
     } catch (err) { alert("Failed to send invite"); } finally { setIsSubmitting(false); }
