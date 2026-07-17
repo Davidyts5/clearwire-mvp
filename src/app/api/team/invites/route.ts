@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
+import { sendNotificationEmail } from '@/lib/email';
 
 const InviteSchema = z.object({
   full_name: z.string().min(2, "Full name is required").max(100),
@@ -116,6 +117,13 @@ export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
     });
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
     const magicLink = `${siteUrl}/invite/${token}`;
+
+    sendNotificationEmail({
+      to: parsed.email,
+      title: "You've been invited to join ClearWire",
+      message: `You've been invited to join a ClearWire workspace as a ${parsed.role}. Click below to set up your account.`,
+      actionUrl: `/invite/${token}`,
+    }).catch(err => console.error('Failed to send invite email:', err));
 
     return NextResponse.json({ success: true, data: invite, magicLink });
   } catch (error: any) {

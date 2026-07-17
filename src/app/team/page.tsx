@@ -16,6 +16,7 @@ export default function TeamManagement() {
   const [canUnfreeze, setCanUnfreeze] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [magicLink, setMagicLink] = useState("");
+  const [invitedEmail, setInvitedEmail] = useState("");
   const [copied, setCopied] = useState(false);
 
   // Edit Modal State
@@ -75,7 +76,7 @@ export default function TeamManagement() {
       });
       const json = await res.json();
       if (json.success) {
-        setMagicLink(json.magicLink);
+        setInvitedEmail(email);
         setEmail("");
         setFullName("");
         fetchTeam(); 
@@ -243,17 +244,11 @@ export default function TeamManagement() {
         </div>
       </div>
 
-      {magicLink && (
-            <div className="mt-6 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-              <p className="text-xs font-semibold text-emerald-800 mb-2">Invite Generated!</p>
-              <div className="flex items-center gap-2">
-                <input readOnly value={magicLink} className="flex-1 bg-white border border-emerald-200 text-xs px-2 py-1.5 rounded text-slate-500" />
-                <button onClick={copyToClipboard} className="bg-emerald-600 text-white p-1.5 rounded hover:bg-emerald-700">
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
-                </button>
-              </div>
-            </div>
-          )}
+      {invitedEmail && (
+        <div className="mt-6 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+          <p className="text-sm font-semibold text-emerald-800">✓ Invite sent to {invitedEmail}</p>
+        </div>
+      )}
         </div>
 
         <div className="lg:col-span-2 space-y-6">
