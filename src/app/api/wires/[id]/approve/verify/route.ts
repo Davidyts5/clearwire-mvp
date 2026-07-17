@@ -114,6 +114,49 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
       if (rpcError) throw new Error(rpcError.message);
 
+      if (updatedWire.status === 'approved') {
+        await createNotification(adminClient, {
+          companyId: auth.companyId,
+          userId: updatedWire.clerk_id,
+          type: NOTIFICATION_TYPES.WIRE_APPROVED,
+          title: 'Wire Approved',
+          message: `Your wire request for ${updatedWire.vendor_name_snapshot} was fully approved.`,
+          actionUrl: `/approve/${updatedWire.id}`,
+          metadata: { wireAmount: updatedWire.amount, vendorName: updatedWire.vendor_name_snapshot },
+          relatedWireId: updatedWire.id,
+        });
+      } else if (updatedWire.status === 'pending_cfo') {
+        const { data: cfoUsers } = await adminClient.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CFO);
+        for (const cfo of cfoUsers || []) {
+          await createNotification(adminClient, {
+            companyId: auth.companyId,
+            userId: cfo.id,
+            type: NOTIFICATION_TYPES.WIRE_PENDING_APPROVAL,
+            title: 'CFO Signature Required',
+            message: `A wire for ${updatedWire.vendor_name_snapshot} requires your signature.`,
+            actionUrl: `/approve/${updatedWire.id}`,
+            metadata: { wireAmount: updatedWire.amount, vendorName: updatedWire.vendor_name_snapshot },
+            relatedWireId: updatedWire.id,
+          });
+        }
+      } else if (updatedWire.status === 'pending_second_approval') {
+        const { data: controllers } = await adminClient.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CONTROLLER);
+        for (const c of controllers || []) {
+          if (c.id === auth.userId) continue; 
+          await createNotification(adminClient, {
+            companyId: auth.companyId,
+            userId: c.id,
+            type: NOTIFICATION_TYPES.WIRE_PENDING_APPROVAL,
+            title: 'Second Signature Required',
+            message: `A wire for ${updatedWire.vendor_name_snapshot} needs a second controller signature.`,
+            actionUrl: `/approve/${updatedWire.id}`,
+            metadata: { wireAmount: updatedWire.amount, vendorName: updatedWire.vendor_name_snapshot },
+            relatedWireId: updatedWire.id,
+          });
+        }
+      }
+
+
       // 2. SELF-HEALING VENDOR MASTER DATA
       // FIX: Use adminClient to bypass any potential RLS restrictions when updating the vendor table
       if (wireData.vendor_id && wireData.account_number_snapshot) {

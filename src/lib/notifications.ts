@@ -1,3 +1,5 @@
+import { sendNotificationEmail } from './email';
+
 export const NOTIFICATION_TYPES = {
   WIRE_PENDING_APPROVAL: 'wire_pending_approval',
   WIRE_APPROVED: 'wire_approved',
@@ -22,6 +24,18 @@ export const NOTIFICATION_TYPE_PRIORITY: Record<NotificationType, Priority> = {
   [NOTIFICATION_TYPES.VENDOR_CHANGED]: 'medium',
   [NOTIFICATION_TYPES.INVITE_SENT]: 'medium',
   [NOTIFICATION_TYPES.INVESTIGATION_ASSIGNED]: 'critical',
+};
+
+
+export const NOTIFICATION_TYPE_EMAIL_ENABLED: Record<NotificationType, boolean> = {
+  [NOTIFICATION_TYPES.WIRE_PENDING_APPROVAL]: true,
+  [NOTIFICATION_TYPES.WIRE_APPROVED]: true,
+  [NOTIFICATION_TYPES.WIRE_DENIED]: true,
+  [NOTIFICATION_TYPES.WIRE_FROZEN]: true,
+  [NOTIFICATION_TYPES.VENDOR_FROZEN]: true,
+  [NOTIFICATION_TYPES.VENDOR_CHANGED]: true,
+  [NOTIFICATION_TYPES.INVITE_SENT]: true,
+  [NOTIFICATION_TYPES.INVESTIGATION_ASSIGNED]: true,
 };
 
 export async function createNotification(supabase: any, params: {
@@ -51,8 +65,24 @@ export async function createNotification(supabase: any, params: {
       related_vendor_id: params.relatedVendorId ?? null,
       related_invite_id: params.relatedInviteId ?? null,
     }]);
-    if (error) console.error('Failed to create notification:', error);
+    if (error) { console.error('Failed to create notification:', error); return; }
+
+    if (NOTIFICATION_TYPE_EMAIL_ENABLED[params.type]) {
+      dispatchEmail(supabase, params).catch(err => console.error('Email dispatch failed:', err));
+    }
   } catch (err) {
     console.error('Exception in createNotification:', err);
   }
+}
+
+
+async function dispatchEmail(supabase: any, params: { userId: string; title: string; message: string; actionUrl?: string }) {
+  const { data: user } = await supabase.from('users').select('email, email_notifications_enabled').eq('id', params.userId).single();
+  if (!user?.email || user.email_notifications_enabled === false) return;
+  await sendNotificationEmail({
+    to: user.email,
+    title: params.title,
+    message: params.message,
+    actionUrl: params.actionUrl,
+  });
 }
