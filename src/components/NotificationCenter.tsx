@@ -1,30 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Bell, Check, Trash2, ShieldAlert, ShieldCheck, Mail, Briefcase, Activity, AlertTriangle } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Bell, Check, ShieldCheck, Mail, Activity, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase";
-
-type Notification = {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  action_url: string | null;
-  metadata: Record<string, any>;
-  is_read: boolean;
-  created_at: string;
-};
+import { useNotifications } from "@/context/NotificationsContext";
 
 export default function NotificationCenter() {
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [userId, setUserId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -34,73 +19,6 @@ export default function NotificationCenter() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  const fetchNotifications = async () => {
-    try {
-      const res = await fetch(`/api/notifications?unreadOnly=false`, { cache: 'no-store' });
-      const json = await res.json();
-      if (json.success) {
-        setNotifications(json.data.notifications || []);
-        setUnreadCount(json.data.unreadCount || 0);
-      }
-    } catch (err) {}
-  };
-
-  useEffect(() => {
-    const init = async () => {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) setUserId(session.user.id);
-      await fetchNotifications();
-    };
-    init();
-  }, []);
-
-  // Set up Supabase Realtime
-  useEffect(() => {
-    if (!userId) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`notifications-${userId}`)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'notifications',
-        filter: `user_id=eq.${userId}`,
-      }, (payload) => {
-        setNotifications(prev => [payload.new as Notification, ...prev]);
-        setUnreadCount(c => c + 1);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [userId]);
-
-  const markAsRead = async (id: string, currentReadState: boolean) => {
-    if (currentReadState) return;
-    
-    // Optimistic UI update
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-    setUnreadCount(c => Math.max(0, c - 1));
-
-    try {
-      await fetch(`/api/notifications/${id}`, { method: 'PATCH' });
-    } catch (err) {
-      // Revert if failed
-      fetchNotifications();
-    }
-  };
-
-  const markAllAsRead = async () => {
-    if (unreadCount === 0) return;
-    
-    // Optimistic UI update
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    setUnreadCount(0);
-
-    try {
-      await fetch(`/api/notifications/mark-all`, { method: 'PATCH' });
-    } catch (err) {
-      fetchNotifications();
-    }
-  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -121,8 +39,8 @@ export default function NotificationCenter() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button 
-        onClick={() => setIsOpen(!isOpen)} 
+      <button
+        onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
       >
         <Bell size={20} />
@@ -135,7 +53,7 @@ export default function NotificationCenter() {
         <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <h3 className="font-bold text-slate-900 flex items-center gap-2">
-              Notifications 
+              Notifications
               {unreadCount > 0 && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{unreadCount} new</span>}
             </h3>
             {unreadCount > 0 && (
@@ -144,7 +62,7 @@ export default function NotificationCenter() {
               </button>
             )}
           </div>
-          
+
           <div className="max-h-[400px] overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="p-8 text-center text-slate-500">
@@ -179,7 +97,7 @@ export default function NotificationCenter() {
                       )}
                     </div>
                     {!n.is_read && (
-                      <button 
+                      <button
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); markAsRead(n.id, n.is_read); }}
                         className="absolute top-4 right-4 text-slate-400 hover:text-blue-600"
                         title="Mark as read"
