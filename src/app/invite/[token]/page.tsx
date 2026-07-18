@@ -13,6 +13,7 @@ export default function InviteRegistration({ params }: { params: { token: string
 
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -39,6 +40,10 @@ export default function InviteRegistration({ params }: { params: { token: string
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      alert("Passwords do not match.");
+      return;
+    }
     setIsSubmitting(true);
     
     try {
@@ -122,10 +127,15 @@ export default function InviteRegistration({ params }: { params: { token: string
               </div>
             </div>
 
+            
             <div>
               <label className="block text-sm font-medium text-slate-700">Set Password</label>
               <div className="mt-1">
                 <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 8 characters" minLength={8} className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm" />
+              </div>
+              <label className="block text-sm font-medium text-slate-700 mt-4">Confirm Password</label>
+              <div className="mt-1">
+                <input required type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" minLength={8} className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm" />
               </div>
             </div>
 

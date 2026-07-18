@@ -77,6 +77,7 @@ export default function TeamManagement() {
       const json = await res.json();
       if (json.success) {
         setInvitedEmail(email);
+        setMagicLink(json.magicLink);
         setEmail("");
         setFullName("");
         fetchTeam(); 
@@ -247,6 +248,19 @@ export default function TeamManagement() {
       {invitedEmail && (
         <div className="mt-6 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
           <p className="text-sm font-semibold text-emerald-800">✓ Invite sent to {invitedEmail}</p>
+          {magicLink && (
+            <div className="mt-3 pt-3 border-t border-emerald-200">
+              <p className="text-xs text-emerald-700 mb-1.5">
+                Email delivery is still in test mode — if they don't receive it, share this link directly:
+              </p>
+              <div className="flex items-center gap-2">
+                <input readOnly value={magicLink} className="flex-1 bg-white border border-emerald-200 text-xs px-2 py-1.5 rounded text-slate-500" />
+                <button onClick={copyToClipboard} className="bg-emerald-600 text-white p-1.5 rounded hover:bg-emerald-700">
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
         </div>

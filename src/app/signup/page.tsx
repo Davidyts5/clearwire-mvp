@@ -19,6 +19,13 @@ export default function SignupPage() {
     const formData = new FormData(e.currentTarget);
     const payload = Object.fromEntries(formData.entries());
 
+    if (payload.password !== payload.confirmPassword) {
+      setError("Passwords do not match.");
+      setIsSubmitting(false);
+      return;
+    }
+    delete payload.confirmPassword;
+
     try {
       const res = await fetch('/api/auth/onboard', {
         method: 'POST',
@@ -110,11 +117,18 @@ export default function SignupPage() {
               </div>
             </div>
 
+            
             <div>
               <label className="block text-sm font-medium text-slate-700">Secure Password</label>
               <div className="mt-1 relative">
                 <Lock className="absolute left-3 top-2.5 text-slate-400" size={18} />
                 <input required type="password" name="password" minLength={12} className="block w-full appearance-none rounded-md border border-slate-300 pl-10 pr-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm" placeholder="Minimum 12 characters" />
+              </div>
+              
+              <label className="block text-sm font-medium text-slate-700 mt-4">Confirm Password</label>
+              <div className="mt-1 relative">
+                <Lock className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                <input required type="password" name="confirmPassword" minLength={12} className="block w-full appearance-none rounded-md border border-slate-300 pl-10 pr-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm" placeholder="Re-enter password" />
               </div>
             </div>
 
