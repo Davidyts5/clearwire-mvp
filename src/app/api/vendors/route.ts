@@ -42,10 +42,6 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
   }
 });
 
-    if (error) throw error;
-
-
-
 // Create a New Vendor
 export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
   try {
