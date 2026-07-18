@@ -18,12 +18,21 @@ const WireSchema = z.object({
 });
 
 export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
+  const { searchParams } = new URL(req.url);
+  const limit = Math.min(Number(searchParams.get('limit')) || 50, 100);
+  const offset = Number(searchParams.get('offset')) || 0;
+
   let query = auth.supabase.from('wire_requests').select('*').eq('company_id', auth.companyId).order('created_at', { ascending: false });
   if (auth.role === ROLES.CLERK) query = query.eq('clerk_id', auth.userId);
-  const { data, error } = await query;
+
+  // Fetch one extra row to detect if there's a next page, without a second query.
+  const { data, error } = await query.range(offset, offset + limit);
   if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 });
-  return NextResponse.json({ success: true, data });
+
+  const hasMore = data.length > limit;
+  return NextResponse.json({ success: true, data: data.slice(0, limit), hasMore });
 });
+
 
 export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
   try {

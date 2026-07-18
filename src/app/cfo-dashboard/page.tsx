@@ -9,21 +9,37 @@ export default function CFODashboard() {
   const [requests, setRequests] = useState<any[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasMoreWires, setHasMoreWires] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     const fetchWires = async () => {
       try {
         const cacheBuster = new Date().getTime();
-        const res = await fetch(`/api/wires?t=${cacheBuster}`, { cache: 'no-store' });
+        const res = await fetch(`/api/wires?limit=50&offset=0&t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         if (json.success) {
           setRequests(json.data);
           setFilteredRequests(json.data);
+          setHasMoreWires(json.hasMore);
         }
       } catch (err) {} finally { setIsLoading(false); }
     };
     fetchWires();
   }, []);
+
+  
+  const loadMoreWires = async () => {
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(`/api/wires?limit=50&offset=${requests.length}`, { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success) {
+        setRequests(prev => [...prev, ...json.data]);
+        setHasMoreWires(json.hasMore);
+      }
+    } catch (err) {} finally { setIsLoadingMore(false); }
+  };
 
   const filterConfig: FilterConfig = {
     searchPlaceholder: "Search vendor, purpose, or ID...",
@@ -102,6 +118,14 @@ export default function CFODashboard() {
             </tbody>
           </table>
         </div>
+
+        {hasMoreWires && (
+          <div className="flex justify-center py-4">
+            <button onClick={loadMoreWires} disabled={isLoadingMore} className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50">
+              {isLoadingMore ? 'Loading...' : 'Load More'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

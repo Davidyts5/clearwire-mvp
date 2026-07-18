@@ -15,6 +15,8 @@ export default function VendorsPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasMoreVendors, setHasMoreVendors] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -27,7 +29,7 @@ export default function VendorsPage() {
         }
 
         const cacheBuster = new Date().getTime();
-        const res = await fetch(`/api/vendors?t=${cacheBuster}`, { cache: 'no-store' });
+        const res = await fetch(`/api/vendors?limit=50&offset=0&t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         
         if (json.success) {
@@ -38,6 +40,19 @@ export default function VendorsPage() {
     };
     fetchData();
   }, []);
+
+  
+  const loadMoreVendors = async () => {
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(`/api/vendors?limit=50&offset=${vendors.length}`, { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success) {
+        setVendors(prev => [...prev, ...json.data]);
+        setHasMoreVendors(json.hasMore);
+      }
+    } catch (err) {} finally { setIsLoadingMore(false); }
+  };
 
   const handleNewVendor = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -117,6 +132,14 @@ export default function VendorsPage() {
             </tbody>
           </table>
         </div>
+
+        {hasMoreVendors && (
+          <div className="flex justify-center py-4">
+            <button onClick={loadMoreVendors} disabled={isLoadingMore} className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50">
+              {isLoadingMore ? 'Loading...' : 'Load More'}
+            </button>
+          </div>
+        )}
       </div>
 
       {isModalOpen && (

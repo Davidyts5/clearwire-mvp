@@ -11,6 +11,8 @@ export default function ClerkDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasMoreWires, setHasMoreWires] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [viewingRejection, setViewingRejection] = useState<any>(null);
 
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
@@ -25,7 +27,7 @@ export default function ClerkDashboard() {
       try {
         const cacheBuster = new Date().getTime();
         const [wireRes, vendorRes] = await Promise.all([
-          fetch(`/api/wires?t=${cacheBuster}`, { cache: 'no-store' }),
+          fetch(`/api/wires?limit=50&offset=0&t=${cacheBuster}`, { cache: 'no-store' }),
           fetch(`/api/vendors?t=${cacheBuster}`, { cache: 'no-store' })
         ]);
         
@@ -35,12 +37,26 @@ export default function ClerkDashboard() {
         if (wireJson.success) {
           setRequests(wireJson.data);
           setFilteredRequests(wireJson.data);
+          setHasMoreWires(wireJson.hasMore);
         }
         if (vendorJson.success) setVendors(vendorJson.data);
       } catch (err) {} finally { setIsLoading(false); }
     };
     fetchData();
   }, []);
+
+  
+  const loadMoreWires = async () => {
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(`/api/wires?limit=50&offset=${requests.length}`, { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success) {
+        setRequests(prev => [...prev, ...json.data]);
+        setHasMoreWires(json.hasMore);
+      }
+    } catch (err) {} finally { setIsLoadingMore(false); }
+  };
 
   const handleVendorSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const vId = e.target.value;
@@ -151,6 +167,15 @@ export default function ClerkDashboard() {
             </tbody>
           </table>
         </div>
+        
+      {hasMoreWires && (
+        <div className="flex justify-center py-4">
+          <button onClick={loadMoreWires} disabled={isLoadingMore} className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50">
+            {isLoadingMore ? 'Loading...' : 'Load More'}
+          </button>
+        </div>
+      )}
+
       </div>
 
       {viewingRejection && (

@@ -19,22 +19,32 @@ const NewVendorSchema = z.object({
 // Fetch the Master Vendor List for the Clerk Dashboard
 export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
   try {
+    const { searchParams } = new URL(req.url);
+    const limit = Math.min(Number(searchParams.get('limit')) || 50, 100);
+    const offset = Number(searchParams.get('offset')) || 0;
+
     const { data, error } = await auth.supabase
       .from('vendors')
       .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status, address')
       .eq('company_id', auth.companyId)
-      .order('name', { ascending: true });
+      .order('name', { ascending: true })
+      .range(offset, offset + limit);
 
     if (error) throw error;
 
+    const hasMore = data.length > limit;
     const headers = new Headers();
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
-    return NextResponse.json({ success: true, data }, { status: 200, headers });
+    return NextResponse.json({ success: true, data: data.slice(0, limit), hasMore }, { status: 200, headers });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 });
+
+    if (error) throw error;
+
+
 
 // Create a New Vendor
 export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
