@@ -1,8 +1,30 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import PDFDocument from 'pdfkit';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+
+const PAGE_WIDTH = 595;
+const PAGE_HEIGHT = 842;
+const MARGIN = 50;
+const MAX_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
+function wrapText(text: string, font: any, size: number, maxWidth: number): string[] {
+  const words = String(text ?? '').split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(test, size) > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = test;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
 
 export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'investigations', params.id, auth.companyId);
@@ -15,79 +37,99 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
 
   if (error || !inv) return NextResponse.json({ error: 'Case not found' }, { status: 404 });
 
-  const doc = new PDFDocument({ margin: 50, size: 'A4' });
-  const chunks: Buffer[] = [];
-  doc.on('data', (chunk) => chunks.push(chunk));
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const done = new Promise<Buffer>((resolve) => {
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-  });
+  let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  let y = PAGE_HEIGHT - MARGIN;
 
-  doc.fontSize(18).fillColor('#0f172a').text('ClearWire Compliance Case File', { align: 'left' });
-  doc.fontSize(10).fillColor('#64748b').text(`Case ${inv.case_number} — Generated ${new Date().toLocaleString()}`);
-  doc.moveDown(1.5);
+  const dark = rgb(0.06, 0.09, 0.16);
+  const gray = rgb(0.4, 0.46, 0.55);
+  const lightGray = rgb(0.58, 0.64, 0.72);
 
-  doc.fontSize(13).fillColor('#0f172a').text('Case Summary');
-  doc.moveDown(0.3);
-  doc.fontSize(10).fillColor('#334155');
-  doc.text(`Status: ${inv.status}`);
-  doc.text(`Type: ${inv.wire_id ? 'Wire Fraud' : 'Vendor Anomaly'}`);
-  doc.text(`Risk Score: ${inv.risk_score ?? 'N/A'} / 100`);
-  doc.text(`Opened: ${new Date(inv.created_at).toLocaleString()}`);
-  if (inv.resolved_at) doc.text(`Resolved: ${new Date(inv.resolved_at).toLocaleString()}`);
-  doc.moveDown(1);
+  function ensureSpace(needed: number) {
+    if (y - needed < MARGIN) {
+      page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      y = PAGE_HEIGHT - MARGIN;
+    }
+  }
+
+  function heading(text: string) {
+    ensureSpace(30);
+    page.drawText(text, { x: MARGIN, y, size: 13, font: bold, color: dark });
+    y -= 20;
+  }
+
+  function line(text: string, opts: { size?: number; color?: any; f?: any } = {}) {
+    const size = opts.size ?? 10;
+    const f = opts.f ?? font;
+    const color = opts.color ?? rgb(0.2, 0.25, 0.33);
+    const wrapped = wrapText(text, f, size, MAX_WIDTH);
+    for (const l of wrapped) {
+      ensureSpace(size + 6);
+      page.drawText(l, { x: MARGIN, y, size, font: f, color });
+      y -= size + 6;
+    }
+  }
+
+  page.drawText('ClearWire Compliance Case File', { x: MARGIN, y, size: 18, font: bold, color: dark });
+  y -= 22;
+  line(`Case ${inv.case_number} — Generated ${new Date().toLocaleString()}`, { size: 9, color: lightGray });
+  y -= 12;
+
+  heading('Case Summary');
+  line(`Status: ${inv.status}`);
+  line(`Type: ${inv.wire_id ? 'Wire Fraud' : 'Vendor Anomaly'}`);
+  line(`Risk Score: ${inv.risk_score ?? 'N/A'} / 100`);
+  line(`Opened: ${new Date(inv.created_at).toLocaleString()}`);
+  if (inv.resolved_at) line(`Resolved: ${new Date(inv.resolved_at).toLocaleString()}`);
+  y -= 10;
 
   if (inv.wire_requests) {
-    doc.fontSize(13).fillColor('#0f172a').text('Segregation of Duties — Chain of Custody');
-    doc.moveDown(0.3);
-    doc.fontSize(10).fillColor('#334155');
-    doc.text(`Wire Amount: $${Number(inv.wire_requests.amount).toLocaleString()}`);
-    doc.text(`Vendor: ${inv.wire_requests.vendor_name_snapshot}`);
-    doc.text(`Initiated by: ${inv.wire_requests.clerk?.full_name || 'Unknown'} (${inv.wire_requests.clerk?.email || ''})`);
-    if (inv.wire_requests.cfo) doc.text(`Actioned by: ${inv.wire_requests.cfo?.full_name} (${inv.wire_requests.cfo?.email})`);
+    heading('Segregation of Duties — Chain of Custody');
+    line(`Wire Amount: $${Number(inv.wire_requests.amount).toLocaleString()}`);
+    line(`Vendor: ${inv.wire_requests.vendor_name_snapshot}`);
+    line(`Initiated by: ${inv.wire_requests.clerk?.full_name || 'Unknown'} (${inv.wire_requests.clerk?.email || ''})`);
+    if (inv.wire_requests.cfo) line(`Actioned by: ${inv.wire_requests.cfo?.full_name} (${inv.wire_requests.cfo?.email})`);
     if (inv.wire_requests.cryptographic_hash) {
-      doc.moveDown(0.3);
-      doc.fontSize(8).fillColor('#94a3b8').text(`Cryptographic Signature: ${inv.wire_requests.cryptographic_hash}`);
+      y -= 4;
+      line(`Cryptographic Signature: ${inv.wire_requests.cryptographic_hash}`, { size: 7, color: lightGray });
     }
-    doc.moveDown(1);
+    y -= 10;
   }
 
   if (inv.vendors) {
-    doc.fontSize(13).fillColor('#0f172a').text('Vendor Details');
-    doc.moveDown(0.3);
-    doc.fontSize(10).fillColor('#334155');
-    doc.text(`Name: ${inv.vendors.name}`);
-    doc.text(`Status: ${inv.vendors.status}`);
-    doc.moveDown(1);
+    heading('Vendor Details');
+    line(`Name: ${inv.vendors.name}`);
+    line(`Status: ${inv.vendors.status}`);
+    y -= 10;
   }
 
-  doc.fontSize(13).fillColor('#0f172a').text('Investigation Notes');
-  doc.moveDown(0.3);
-  doc.fontSize(10).fillColor('#334155');
+  heading('Investigation Notes');
   if (!inv.investigation_notes || inv.investigation_notes.length === 0) {
-    doc.text('No notes recorded.');
+    line('No notes recorded.');
   } else {
-    inv.investigation_notes.forEach((n: any) => {
-      doc.fontSize(9).fillColor('#64748b').text(`${new Date(n.created_at).toLocaleString()} — ${n.users?.full_name || 'Unknown'} (${n.users?.role || ''})`);
-      doc.fontSize(10).fillColor('#334155').text(n.note);
-      doc.moveDown(0.5);
-    });
+    for (const n of inv.investigation_notes) {
+      line(`${new Date(n.created_at).toLocaleString()} — ${n.users?.full_name || 'Unknown'} (${n.users?.role || ''})`, { size: 8, color: lightGray });
+      line(n.note);
+      y -= 6;
+    }
   }
-  doc.moveDown(1);
+  y -= 10;
 
   if (inv.status === 'resolved') {
-    doc.fontSize(13).fillColor('#0f172a').text('Resolution');
-    doc.moveDown(0.3);
-    doc.fontSize(10).fillColor('#334155').text(inv.resolution_notes || 'No resolution notes provided.');
+    heading('Resolution');
+    line(inv.resolution_notes || 'No resolution notes provided.');
   }
 
-  doc.moveDown(2);
-  doc.fontSize(8).fillColor('#94a3b8').text('Generated by ClearWire — this document reflects the immutable audit trail as of the generation timestamp above.', { align: 'center' });
+  ensureSpace(30);
+  y -= 10;
+  page.drawText('Generated by ClearWire — reflects the immutable audit trail as of the timestamp above.', { x: MARGIN, y, size: 7, font, color: lightGray });
 
-  doc.end();
-  const pdfBuffer = await done;
+  const pdfBytes = await pdfDoc.save();
 
-  return new NextResponse(pdfBuffer, {
+  return new NextResponse(Buffer.from(pdfBytes), {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
