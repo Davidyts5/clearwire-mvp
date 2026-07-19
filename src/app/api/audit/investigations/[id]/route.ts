@@ -22,7 +22,8 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
       inv.investigation_notes.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
 
-    return NextResponse.json({ success: true, data: inv });
+    const { data: auditors } = await auth.supabase.from('users').select('id, full_name').eq('company_id', auth.companyId).eq('role', 'auditor');
+    return NextResponse.json({ success: true, data: inv, auditors });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -35,6 +36,7 @@ export const PUT = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
 
     const payload: any = { updated_at: new Date().toISOString() };
     if (body.status) payload.status = body.status;
+    if (body.assigned_to) payload.assigned_to = body.assigned_to;
     if (body.status === 'resolved') {
       payload.resolved_at = new Date().toISOString();
       payload.resolution_notes = body.resolution_notes || 'Resolved by Auditor';
