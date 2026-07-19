@@ -9,6 +9,8 @@ export const NOTIFICATION_TYPES = {
   VENDOR_CHANGED: 'vendor_changed',
   INVITE_SENT: 'invite_sent',
   INVESTIGATION_ASSIGNED: 'investigation_assigned',
+  WIRE_REMINDER: 'wire_reminder',
+  WIRE_ESCALATED: 'wire_escalated',
 } as const;
 
 export type NotificationType = typeof NOTIFICATION_TYPES[keyof typeof NOTIFICATION_TYPES];
@@ -24,6 +26,8 @@ export const NOTIFICATION_TYPE_PRIORITY: Record<NotificationType, Priority> = {
   [NOTIFICATION_TYPES.VENDOR_CHANGED]: 'medium',
   [NOTIFICATION_TYPES.INVITE_SENT]: 'medium',
   [NOTIFICATION_TYPES.INVESTIGATION_ASSIGNED]: 'critical',
+  [NOTIFICATION_TYPES.WIRE_REMINDER]: 'high',
+  [NOTIFICATION_TYPES.WIRE_ESCALATED]: 'critical',
 };
 
 
@@ -36,6 +40,8 @@ export const NOTIFICATION_TYPE_EMAIL_ENABLED: Record<NotificationType, boolean> 
   [NOTIFICATION_TYPES.VENDOR_CHANGED]: true,
   [NOTIFICATION_TYPES.INVITE_SENT]: true,
   [NOTIFICATION_TYPES.INVESTIGATION_ASSIGNED]: true,
+  [NOTIFICATION_TYPES.WIRE_REMINDER]: true,
+  [NOTIFICATION_TYPES.WIRE_ESCALATED]: true,
 };
 
 export async function createNotification(supabase: any, params: {

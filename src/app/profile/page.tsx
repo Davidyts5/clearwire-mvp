@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Monitor, Trash2, Edit2, Check, X } from "lucide-react";
+import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Monitor, Trash2, Edit2, Check, X, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 import { Permissions } from "@/lib/roles";
@@ -301,6 +301,40 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Notification Preferences Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Mail className="text-blue-500" size={20} /> Notification Preferences
+            </h2>
+            <p className="text-sm text-slate-500">Control whether you receive email notifications in addition to in-app alerts.</p>
+          </div>
+        </div>
+        <div className="p-6">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={user?.email_notifications_enabled ?? true}
+              onChange={async (e) => {
+                const newValue = e.target.checked;
+                setUser((prev: any) => ({ ...prev, email_notifications_enabled: newValue }));
+                try {
+                  await fetch('/api/profile/notifications', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email_notifications_enabled: newValue }),
+                  });
+                } catch (err) {}
+              }}
+              className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium text-slate-700">Email me for wire approvals, vendor alerts, and invitations</span>
+          </label>
+        </div>
+      </div>
+
 
       {renamingDevice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
