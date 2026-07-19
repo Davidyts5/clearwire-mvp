@@ -25,9 +25,9 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
 
     const { data, error } = await auth.supabase
       .from('vendors')
-      .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status, address')
+      .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status, address, created_at')
       .eq('company_id', auth.companyId)
-      .order('name', { ascending: true })
+      .order('created_at', { ascending: false })
       .range(offset, offset + limit);
 
     if (error) throw error;
