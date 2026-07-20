@@ -8,19 +8,30 @@ export default function Error({
   reset: () => void;
 }) {
   return (
-    <div style={{ padding: 24, fontFamily: 'monospace', background: '#0f172a', color: '#f87171', minHeight: '100vh' }}>
-      <h2 style={{ color: 'white', marginBottom: 12 }}>DEBUG: Page-level crash</h2>
-      <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, background: '#1e293b', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
-        {error.message}
-        {'\n\n'}
-        {error.stack}
-      </pre>
-      <button
-        onClick={() => reset()}
-        style={{ marginTop: 16, padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 6 }}
-      >
-        Try again
-      </button>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: 24 }}>
+      <div style={{ maxWidth: 420, textAlign: 'center' }}>
+        <div style={{ width: 56, height: 56, borderRadius: 12, background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+          <span style={{ fontSize: 28 }}>⚠️</span>
+        </div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Something went wrong</h2>
+        <p style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.5 }}>
+          We hit an unexpected error loading this page. Your data is safe — this was a display issue, not a data issue. Try again, or head back to your dashboard.
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <button
+            onClick={() => reset()}
+            style={{ padding: '10px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+          >
+            Try Again
+          </button>
+          <a
+            href="/"
+            style={{ padding: '10px 20px', background: 'white', color: '#334155', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 600, fontSize: 14, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+          >
+            Back to Dashboard
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
