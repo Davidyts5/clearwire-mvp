@@ -8,19 +8,29 @@ import { ROLE_VALUES, ROLES } from '@/lib/roles';
 export const POST = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   try {
     const body = await req.json();
+    const adminClient = await getAdminClient();
 
-    const { data: device, error: fetchError } = await auth.supabase
+    // Fix 2: Bypass RLS using Admin Client to fetch device for CFOs, 
+    // but strictly manually enforce tenant isolation and ownership before proceeding
+    const { data: device, error: fetchError } = await adminClient
       .from('user_authenticators')
       .select('user_id, revoked, device_name')
       .eq('id', params.id)
       .single();
 
     if (fetchError || !device) return NextResponse.json({ error: 'Device not found' }, { status: 404 });
+    
+    // Explicit tenant check: Does the user owning this device belong to the current authenticated user's company?
+    const { data: ownerData } = await adminClient.from('users').select('company_id').eq('id', device.user_id).single();
+    if (!ownerData || ownerData.company_id !== auth.companyId) {
+       return NextResponse.json({ error: 'Device not found' }, { status: 404 }); // Obfuscate 403 as 404 to prevent tenant-id enumeration
+    }
+
     if (device.user_id !== auth.userId && auth.role !== ROLES.CFO) return NextResponse.json({ error: 'Unauthorized to revoke this device' }, { status: 403 });
     if (device.revoked) return NextResponse.json({ error: 'Device is already revoked' }, { status: 400 });
 
     // Prevent revoking last active device
-    const { data: activeDevices, error: countError } = await auth.supabase
+    const { data: activeDevices, error: countError } = await adminClient
       .from('user_authenticators')
       .select('id')
       .eq('user_id', device.user_id)
@@ -71,7 +81,6 @@ export const POST = withAuth([...ROLE_VALUES], async (req, { params }, auth) => 
     await auth.supabase.from('webauthn_challenges').delete().eq('id', challengeData.id);
 
     // Perform Soft Revoke
-    const adminClient = await getAdminClient();
     const { error: revokeError } = await adminClient
       .from('user_authenticators')
       .update({ 

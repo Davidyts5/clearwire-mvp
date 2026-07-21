@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import Decimal from 'decimal.js';
 
 export const RiskFactors = {
   NEW_VENDOR: { score: 50, reason: "New/Unrecognized Vendor" },
@@ -21,7 +22,7 @@ interface WirePayload {
   company_id: string;
   vendor_id?: string;
   vendor_name: string;
-  amount: number;
+  amount: number | string; // Accept string from upstream to avoid precision loss parsing float early
   purpose: string;
   destination_country?: string; 
   account_number?: string;
@@ -40,6 +41,9 @@ const HIGH_RISK_COUNTRY_CODES = ['RU', 'KP', 'IR', 'SY', 'CU', 'VE', 'MM'];
 export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Promise<RiskResult> {
   let score = 10; 
   let reasons: string[] = [];
+  
+  // Fix 6: Use Decimal.js for precise currency checks
+  const currentAmount = new Decimal(payload.amount);
 
   // 1. FETCH COMPANY POLICY SETTINGS
   const { data: settings } = await dbClient
@@ -57,7 +61,7 @@ export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Pro
   // If custom, the logic relies purely on the strict hard-toggles we evaluate below
 
   // 2. BASELINE ANOMALY DETECTION
-  if (payload.amount > 100000) {
+  if (currentAmount.greaterThan(100000)) {
     score += RiskFactors.HIGH_AMOUNT.score;
     reasons.push(RiskFactors.HIGH_AMOUNT.reason);
   }
@@ -90,7 +94,7 @@ export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Pro
       reasons.push(`${RiskFactors.HIGH_RISK_COUNTRY.reason} (${payload.destination_country})`);
     }
 
-    if (settings.freeze_above_amount && payload.amount >= (settings.freeze_amount_threshold || 999999999)) {
+    if (settings.freeze_above_amount && currentAmount.greaterThanOrEqualTo(settings.freeze_amount_threshold || 999999999)) {
       score += RiskFactors.POLICY_ABOVE_THRESHOLD.score;
       reasons.push(`${RiskFactors.POLICY_ABOVE_THRESHOLD.reason} (Threshold: $${settings.freeze_amount_threshold})`);
     }
@@ -139,7 +143,7 @@ export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Pro
       }
     } else {
       const recentDuplicate = vendorHistory.find((w: any) => 
-        w.amount === payload.amount && 
+        new Decimal(w.amount).equals(currentAmount) && 
         (new Date().getTime() - new Date(w.created_at).getTime()) < 30 * 24 * 60 * 60 * 1000 
       );
       if (recentDuplicate) {

@@ -37,6 +37,9 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
     const { data: invite, error: inviteError } = await supabaseAdmin.from('team_invites').select('*').eq('token', params.token).eq('status', 'pending').single();
     if (inviteError || !invite) return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 });
+    
+    // Fix 3: Also enforce token expiration server-side on POST
+    if (new Date() > new Date(invite.expires_at)) return NextResponse.json({ error: 'Invite link has expired' }, { status: 400 });
 
     const { data: authData, error: authError } = await supabase.auth.signUp({ email: invite.email, password: parsed.password });
     if (authError || !authData.user) return NextResponse.json({ error: authError?.message || 'Failed to create secure account' }, { status: 400 });

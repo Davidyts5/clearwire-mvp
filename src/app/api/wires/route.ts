@@ -36,7 +36,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
 
 export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
   try {
-    const isAllowed = checkRateLimit(`wires_${auth.userId}`, 5, 60000);
+    const isAllowed = await checkRateLimit(`wires_${auth.userId}`, 5, 60000);
     if (!isAllowed) return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
 
     const formData = await req.formData();
@@ -57,6 +57,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     }
     
     const parsed = validationResult.data;
+    const vendorTrimmed = parsed.vendor.trim();
 
     const invoiceFile = formData.get("invoice") as File;
     let storedInvoicePath = null;
@@ -81,12 +82,20 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       if (parseFloat(parsed.amount) > 5000) invoiceRiskPenalty = 15;
     }
 
+    // Fix 1: Case-insensitive vendor lookup
     const { data: vendorData } = await auth.supabase
       .from('vendors')
-      .select('id, account_number, status')
-      .eq('name', parsed.vendor)
+      .select('id, name, account_number, status')
+      .ilike('name', vendorTrimmed)
       .eq('company_id', auth.companyId)
       .single();
+
+    // If an insensitive match is found but the exact casing/spacing is different, require confirmation to avoid missing fraud.
+    if (vendorData && vendorData.name !== vendorTrimmed) {
+        return NextResponse.json({ 
+            error: `Vendor name mismatch: Did you mean "${vendorData.name}"? Please use the exact existing vendor name or confirm this is a separate vendor.` 
+        }, { status: 409 });
+    }
 
     if (vendorData?.status === "restricted") return NextResponse.json({ error: "This vendor is restricted and cannot be used for new wires." }, { status: 403 });
 
@@ -95,19 +104,34 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     if (!vendorData) {
       const { data: newVendor, error: vendorInsertError } = await auth.supabase.from('vendors').insert([{ 
         company_id: auth.companyId, 
-        name: parsed.vendor,
+        name: vendorTrimmed,
         account_number: parsed.account_number || null,
         swift_bic: parsed.swift_bic || null
       }]).select().single();
       
-      if (vendorInsertError) return NextResponse.json({ error: `Database missing vendors table.` }, { status: 500 });
-      finalVendorId = newVendor?.id;
+      if (vendorInsertError) {
+        // Fix 5: Handle concurrent insertion race condition properly instead of generic DB missing error
+        if (vendorInsertError.code === '23505') { // Postgres Unique Violation
+            const { data: existingVendor } = await auth.supabase
+                .from('vendors')
+                .select('id')
+                .ilike('name', vendorTrimmed)
+                .eq('company_id', auth.companyId)
+                .single();
+            if (existingVendor) finalVendorId = existingVendor.id;
+            else return NextResponse.json({ error: `Database race condition could not be resolved.` }, { status: 500 });
+        } else {
+            return NextResponse.json({ error: `Failed to create vendor: ${vendorInsertError.message}` }, { status: 500 });
+        }
+      } else {
+          finalVendorId = newVendor?.id;
+      }
     }
 
     const riskAnalysis = await evaluateWireRisk(auth.supabase, {
       company_id: auth.companyId,
       vendor_id: finalVendorId,
-      vendor_name: parsed.vendor,
+      vendor_name: vendorTrimmed,
       amount: parseFloat(parsed.amount),
       purpose: parsed.purpose,
       destination_country: parsed.destination_country,
@@ -122,8 +146,8 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     const { data: requestData, error: dbError } = await auth.supabase.from('wire_requests').insert([{
       company_id: auth.companyId,
       vendor_id: finalVendorId,
-      vendor_name_snapshot: parsed.vendor,
-      vendor_name: parsed.vendor,
+      vendor_name_snapshot: vendorTrimmed,
+      vendor_name: vendorTrimmed,
       account_number_snapshot: parsed.account_number,
       swift_bic_snapshot: parsed.swift_bic,
       invoice_path: storedInvoicePath,

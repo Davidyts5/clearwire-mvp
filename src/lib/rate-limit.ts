@@ -1,24 +1,47 @@
-// LIGHTWEIGHT IN-MEMORY RATE LIMITER
-// Perfect for Edge/Serverless environments to prevent brute-force attacks and Twilio API drain.
+import { getAdminClient } from './api-auth';
 
-type RateLimitRecord = {
-  count: number;
-  resetTime: number;
-};
-
-const rateLimitMap = new Map<string, RateLimitRecord>();
-
-export function checkRateLimit(identifier: string, limit: number, windowMs: number): boolean {
+// PERSISTENT RATE LIMITER (Postgres-Backed)
+// Replaces the old in-memory map which failed in serverless deployments.
+export async function checkRateLimit(identifier: string, limit: number, windowMs: number): Promise<boolean> {
+  const adminClient = await getAdminClient();
   const now = Date.now();
-  const record = rateLimitMap.get(identifier);
+  
+  // We use the admin client so we bypass RLS for system operations
+  // We use an RPC call to handle the atomic UPSERT operation safely
+  const { data, error } = await adminClient.rpc('enforce_rate_limit', {
+    p_identifier: identifier,
+    p_limit: limit,
+    p_window_ms: windowMs,
+    p_now: now
+  });
 
-  if (!record || now > record.resetTime) {
-    rateLimitMap.set(identifier, { count: 1, resetTime: now + windowMs });
+  if (error) {
+    // If the RPC isn't set up yet, fallback to a standard approach to avoid breaking the app immediately
+    const { data: record, error: fetchErr } = await adminClient
+      .from('rate_limits')
+      .select('count, reset_time')
+      .eq('identifier', identifier)
+      .single();
+
+    if (!record || now > record.reset_time) {
+      // Upsert: Create or reset
+      await adminClient.from('rate_limits').upsert({
+        identifier,
+        count: 1,
+        reset_time: now + windowMs
+      });
+      return true;
+    }
+
+    if (record.count >= limit) return false;
+
+    // Increment
+    await adminClient.from('rate_limits')
+      .update({ count: record.count + 1 })
+      .eq('identifier', identifier);
+      
     return true;
   }
-
-  if (record.count >= limit) return false;
-
-  record.count += 1;
-  return true;
+  
+  return data;
 }
