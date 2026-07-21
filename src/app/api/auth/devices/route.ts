@@ -9,7 +9,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
     const targetUserId = url.searchParams.get('userId');
 
     let query = auth.supabase.from('user_authenticators')
-      .select('id, user_id, credential_id, public_key:credential_public_key, device_name, browser, os, form_factor, device_type:credential_device_type, created_at, last_used_at, revoked, revoked_at, revoked_by, revoker:users!user_authenticators_revoked_by_fkey(full_name)');
+      .select('id, user_id, credential_id, public_key:credential_public_key, device_name, browser, os, form_factor, registered_location, device_type:credential_device_type, created_at, last_used_at, revoked, revoked_at, revoked_by, revoker:users!user_authenticators_revoked_by_fkey(full_name)');
     
     if (auth.role === ROLES.CFO && targetUserId) {
       query = query.eq('user_id', targetUserId);
@@ -21,7 +21,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
     if (error) {
       // Fallback query if the foreign key relation fails due to schema issues
       const fbQuery = auth.supabase.from('user_authenticators')
-        .select('id, user_id, credential_id, public_key:credential_public_key, device_name, browser, os, form_factor, device_type:credential_device_type, created_at, last_used_at, revoked, revoked_at, revoked_by');
+        .select('id, user_id, credential_id, public_key:credential_public_key, device_name, browser, os, form_factor, registered_location, device_type:credential_device_type, created_at, last_used_at, revoked, revoked_at, revoked_by');
       if (auth.role === ROLES.CFO && targetUserId) fbQuery.eq('user_id', targetUserId);
       else fbQuery.eq('user_id', auth.userId);
       

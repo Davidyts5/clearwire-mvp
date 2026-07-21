@@ -11,7 +11,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
   await verifySegregationOfDuties(auth.supabase, params.id, auth.userId);
 
-  // FIX: Fetch the vendor_id and snapshots so the self-healing logic has the data it needs!
+  // Fetch the vendor_id and snapshots so the self-healing logic has the data it needs
   const { data: wireData } = await auth.supabase
     .from('wire_requests')
     .select('amount, vendor_id, account_number_snapshot, swift_bic_snapshot')
@@ -71,7 +71,15 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
         updatedCounter = verification.authenticationInfo.newCounter;
       }
 
-      await auth.supabase.from('user_authenticators').update({ counter: updatedCounter }).eq('id', authenticator.id);
+      // Fix 2: Ensure last_used_at is tracked when a security key is successfully used to approve a wire
+      await auth.supabase
+        .from('user_authenticators')
+        .update({ 
+          counter: updatedCounter,
+          last_used_at: new Date().toISOString() 
+        })
+        .eq('id', authenticator.id);
+        
       await auth.supabase.from('webauthn_challenges').delete().eq('id', challengeData.id);
 
       const fidoSignatureHash = crypto.createHash('sha256').update(body.response.signature || 'fallback_hash').digest('hex');
@@ -158,7 +166,6 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
 
       // 2. SELF-HEALING VENDOR MASTER DATA
-      // FIX: Use adminClient to bypass any potential RLS restrictions when updating the vendor table
       if (wireData.vendor_id && wireData.account_number_snapshot) {
         const { data: vendorData } = await adminClient
           .from('vendors')

@@ -38,6 +38,19 @@ export const POST = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, aut
       const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
       const { publicKey, id: credentialID, counter } = credential;
 
+      // Fix 3: Capture Server-Side Geo Location
+      // Vercel injects location headers automatically if you use the edge network.
+      // We fall back to standard reverse proxy headers for self-hosting.
+      let registeredLocation = 'Unknown Location';
+      const city = req.headers.get('x-vercel-ip-city') || req.headers.get('x-real-ip-city');
+      const country = req.headers.get('x-vercel-ip-country') || req.headers.get('x-real-ip-country');
+      
+      if (city && country) {
+        registeredLocation = `${city}, ${country}`;
+      } else if (country) {
+        registeredLocation = country;
+      }
+
       const { error: insertError } = await auth.supabase.from('user_authenticators').insert([{
         user_id: auth.userId,
         credential_id: credentialID, 
@@ -49,7 +62,8 @@ export const POST = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, aut
         device_name: metadata ? `${metadata.browser} on ${metadata.os}` : 'Security Key',
         browser: metadata?.browser || 'Unknown Browser',
         os: metadata?.os || 'Unknown Device',
-        form_factor: metadata?.formFactor || 'Desktop'
+        form_factor: metadata?.formFactor || 'Desktop',
+        registered_location: registeredLocation // Track immutable server-derived geo
       }]);
 
       if (insertError) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Monitor, Trash2, Edit2, Check, X, Mail } from "lucide-react";
+import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Monitor, Trash2, Edit2, Check, X, Mail, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 import { Permissions } from "@/lib/roles";
@@ -156,10 +156,11 @@ export default function ProfilePage() {
       }
 
       // 3. Verify
+      const meta = await getDeviceMetadata();
       const verifyRes = await fetch('/api/auth/webauthn/register/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ response: attResp, metadata: getDeviceMetadata() }),
+        body: JSON.stringify({ response: attResp, metadata: meta }),
       });
       const verifyJson = await verifyRes.json();
 
@@ -265,9 +266,17 @@ export default function ProfilePage() {
                           {device.revoked ? 'Revoked' : 'Active'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Monitor size={12} className="text-slate-400" />
-                        <span className="text-xs font-semibold text-slate-600">{device.browser || 'Unknown Browser'} &bull; {device.os || 'Unknown Device'}</span>
+                      <div className="flex items-center gap-4 mt-1">
+                        <div className="flex items-center gap-1.5">
+                          <Monitor size={12} className="text-slate-400" />
+                          <span className="text-xs font-semibold text-slate-600">{device.browser || 'Unknown Browser'} &bull; {device.os || 'Unknown Device'}</span>
+                        </div>
+                        {device.registered_location && (
+                          <div className="flex items-center gap-1.5 border-l pl-4 border-slate-200">
+                            <MapPin size={12} className="text-slate-400" />
+                            <span className="text-xs font-semibold text-slate-600">{device.registered_location}</span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-4 mt-2">
                         <span className="text-[10px] uppercase font-bold text-slate-400">Created: {new Date(device.created_at).toLocaleDateString()}</span>
