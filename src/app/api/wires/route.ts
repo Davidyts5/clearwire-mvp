@@ -7,6 +7,7 @@ import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES, ROLE_VALUES } from '@/lib/roles';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 const WireSchema = z.object({
   vendor: z.string().min(1, "Vendor name is required"),
@@ -162,9 +163,9 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
 
     if (dbError) return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
 
-    await auth.supabase.from('audit_logs').insert([{
-      company_id: auth.companyId, wire_id: requestData.id, actor_id: auth.userId, action: 'CREATED', new_hash: 'INITIAL_STATE'
-    }]);
+    await appendAuditLog(auth.supabase, {
+      companyId: auth.companyId, wireId: requestData.id, actorId: auth.userId, action: 'CREATED', eventPayload: { amount: parsed.amount, vendor: vendorTrimmed, risk_score: riskAnalysis.totalScore, risk_reasons: riskAnalysis.reasons }
+    });
 
     if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
       try {

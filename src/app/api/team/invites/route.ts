@@ -6,6 +6,7 @@ import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
 import { sendNotificationEmail } from '@/lib/email';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 const InviteSchema = z.object({
   full_name: z.string().min(2, "Full name is required").max(100),
@@ -96,14 +97,13 @@ export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
     if (insertError) throw insertError;
 
     // 4. WORM Audit Log
-    await adminClient.from('audit_logs').insert([{
-      company_id: auth.companyId,
-      wire_id: '00000000-0000-0000-0000-000000000000',
-      actor_id: auth.userId,
+    await appendAuditLog(adminClient, {
+      companyId: auth.companyId,
+      wireId: '00000000-0000-0000-0000-000000000000',
+      actorId: auth.userId,
       action: 'INVITATION_CREATED',
-      new_hash: invite.id,
-      previous_hash: parsed.email
-    }]);
+      eventPayload: { invite_id: invite.id, email: parsed.email }
+    });
 
     
     await createNotification(adminClient, {

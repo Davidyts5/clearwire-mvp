@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
 import { withAuth, verifyTenantResource, verifySegregationOfDuties, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
@@ -14,7 +15,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
   // Fetch the vendor_id and snapshots so the self-healing logic has the data it needs
   const { data: wireData } = await auth.supabase
     .from('wire_requests')
-    .select('amount, vendor_id, account_number_snapshot, swift_bic_snapshot')
+    .select('status, amount, vendor_id, account_number_snapshot, swift_bic_snapshot')
     .eq('id', params.id)
     .single();
   
@@ -120,7 +121,17 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
         p_requires_cfo_approval: requiresCFO
       });
 
+      
       if (rpcError) throw new Error(rpcError.message);
+
+      await appendAuditLog(adminClient, {
+        companyId: auth.companyId,
+        wireId: params.id,
+        actorId: auth.userId,
+        action: 'STATE_CHANGED_TO_' + updatedWire.status.toUpperCase(),
+        eventPayload: { crypto_hash: `0x${fidoSignatureHash}`, previous_status: wireData.status, new_status: updatedWire.status }
+      });
+
 
       if (updatedWire.status === 'approved') {
         await createNotification(adminClient, {
@@ -179,13 +190,13 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
             swift_bic: wireData.swift_bic_snapshot
           }).eq('id', wireData.vendor_id);
 
-          await adminClient.from('audit_logs').insert([{
-            company_id: auth.companyId,
-            wire_id: params.id,
-            actor_id: auth.userId,
+          await appendAuditLog(adminClient, {
+            companyId: auth.companyId,
+            wireId: params.id,
+            actorId: auth.userId,
             action: 'VENDOR_MASTER_UPDATED',
-            new_hash: `0x${fidoSignatureHash}`
-          }]);
+            eventPayload: { vendor_id: wireData.vendor_id, crypto_hash: `0x${fidoSignatureHash}` }
+          });
         }
       }
 

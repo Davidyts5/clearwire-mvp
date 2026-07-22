@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { withAuth, verifyTenantResource, verifySegregationOfDuties, getAdminClient } from '@/lib/api-auth';
 import { ROLES, ROLE_VALUES } from '@/lib/roles';
 import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   try {
@@ -74,7 +75,21 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       p_rejection_notes: rejection_notes || null
     });
 
+    
     if (rpcError) throw new Error(rpcError.message);
+
+    await appendAuditLog(adminClient, {
+      companyId: auth.companyId,
+      wireId: params.id,
+      actorId: auth.userId,
+      action: 'STATE_CHANGED_TO_' + updatedWire.status.toUpperCase(),
+      eventPayload: { 
+        rejection_reason: rejection_reason || null, 
+        rejection_notes: rejection_notes || null, 
+        new_status: updatedWire.status 
+      }
+    });
+
 
     if (newStatus === 'denied') {
       const { data: wireClerk } = await adminClient.from('wire_requests').select('clerk_id, vendor_name_snapshot, amount').eq('id', params.id).single();

@@ -4,6 +4,7 @@ import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { getRpId, getOrigin, base64ToUint8Array } from '@/lib/webauthn';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLE_VALUES, ROLES } from '@/lib/roles';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 export const POST = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   try {
@@ -93,14 +94,13 @@ export const POST = withAuth([...ROLE_VALUES], async (req, { params }, auth) => 
     if (revokeError) throw revokeError;
 
     // Audit Logging
-    await adminClient.from('audit_logs').insert([{
-      company_id: auth.companyId,
-      wire_id: '00000000-0000-0000-0000-000000000000',
-      actor_id: auth.userId,
+    await appendAuditLog(adminClient, {
+      companyId: auth.companyId,
+      wireId: '00000000-0000-0000-0000-000000000000',
+      actorId: auth.userId,
       action: 'DEVICE_REVOKED',
-      new_hash: params.id,
-      previous_hash: device.device_name
-    }]);
+      eventPayload: { device_id: params.id, device_name: device.device_name }
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

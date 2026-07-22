@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api-auth';
 import { ROLES, ROLE_VALUES } from '@/lib/roles';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 // GET Settings
 export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
@@ -70,14 +71,13 @@ export const PUT = withAuth([ROLES.CFO], async (req, ctx, auth) => {
 
     // Security Requirement: Log policy changes to the WORM Audit Log
     if (body.vendor_auth_policy !== undefined && oldSettings && oldSettings.vendor_auth_policy !== body.vendor_auth_policy) {
-      await auth.supabase.from('audit_logs').insert([{
-        company_id: auth.companyId,
-        wire_id: '00000000-0000-0000-0000-000000000000',
-        actor_id: auth.userId,
+      await appendAuditLog(auth.supabase, {
+        companyId: auth.companyId,
+        wireId: '00000000-0000-0000-0000-000000000000',
+        actorId: auth.userId,
         action: 'POLICY_VENDOR_AUTH_CHANGED',
-        previous_hash: oldSettings.vendor_auth_policy || 'controller_any',
-        new_hash: body.vendor_auth_policy
-      }]);
+        eventPayload: { previous_policy: oldSettings.vendor_auth_policy || 'controller_any', new_policy: body.vendor_auth_policy }
+      });
     }
     
     return NextResponse.json({ success: true, data });

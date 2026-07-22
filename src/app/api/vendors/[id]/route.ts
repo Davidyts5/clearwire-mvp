@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { withAuth, verifyTenantResource } from '@/lib/api-auth';
 import { ROLE_VALUES, ROLES } from '@/lib/roles';
 import { z } from 'zod';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   try {
@@ -105,9 +106,9 @@ export const POST = withAuth([ROLES.CLERK], async (req, { params }, auth) => {
     }]);
 
     // WORM Audit Log
-    await auth.supabase.from('audit_logs').insert([{
-      company_id: auth.companyId, wire_id: '00000000-0000-0000-0000-000000000000', actor_id: auth.userId, action: 'VENDOR_CHANGE_REQUESTED', new_hash: 'SYSTEM'
-    }]);
+    await appendAuditLog(auth.supabase, {
+      companyId: auth.companyId, wireId: '00000000-0000-0000-0000-000000000000', actorId: auth.userId, action: 'VENDOR_CHANGE_REQUESTED', eventPayload: { vendor_id: params.id }
+    });
 
     return NextResponse.json({ success: true, data: requestData });
   } catch (error: any) {

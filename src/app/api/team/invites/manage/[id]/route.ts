@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 // DELETE to Cancel
 export const DELETE = withAuth([ROLES.CFO], async (req, { params }, auth) => {
@@ -26,14 +27,13 @@ export const DELETE = withAuth([ROLES.CFO], async (req, { params }, auth) => {
 
     if (updateError) throw updateError;
 
-    await adminClient.from('audit_logs').insert([{
-      company_id: auth.companyId,
-      wire_id: '00000000-0000-0000-0000-000000000000',
-      actor_id: auth.userId,
+    await appendAuditLog(adminClient, {
+      companyId: auth.companyId,
+      wireId: '00000000-0000-0000-0000-000000000000',
+      actorId: auth.userId,
       action: 'INVITATION_CANCELLED',
-      new_hash: params.id,
-      previous_hash: invite.email
-    }]);
+      eventPayload: { invite_id: params.id, email: invite.email }
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -70,14 +70,13 @@ export const PUT = withAuth([ROLES.CFO], async (req, { params }, auth) => {
 
     if (updateError) throw updateError;
 
-    await adminClient.from('audit_logs').insert([{
-      company_id: auth.companyId,
-      wire_id: '00000000-0000-0000-0000-000000000000',
-      actor_id: auth.userId,
+    await appendAuditLog(adminClient, {
+      companyId: auth.companyId,
+      wireId: '00000000-0000-0000-0000-000000000000',
+      actorId: auth.userId,
       action: 'INVITATION_RESENT',
-      new_hash: params.id,
-      previous_hash: invite.email
-    }]);
+      eventPayload: { invite_id: params.id, email: invite.email }
+    });
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
     const magicLink = `${siteUrl}/invite/${newToken}`;

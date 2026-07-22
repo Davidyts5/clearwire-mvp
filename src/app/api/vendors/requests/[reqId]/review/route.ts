@@ -4,6 +4,7 @@ import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 import { z } from 'zod';
 import { createNotification, NOTIFICATION_TYPES } from '@/lib/notifications';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 const ReviewSchema = z.object({
   action: z.enum(['approve', 'reject', 'escalate']),
@@ -108,9 +109,9 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       details: { reason: parsed.reason, request_id: request.id }
     }]);
 
-    await auth.supabase.from('audit_logs').insert([{
-      company_id: auth.companyId, wire_id: '00000000-0000-0000-0000-000000000000', actor_id: auth.userId, action: `VENDOR_CHANGE_${historyAction}`, new_hash: 'SYSTEM'
-    }]);
+    await appendAuditLog(auth.supabase, {
+      companyId: auth.companyId, wireId: '00000000-0000-0000-0000-000000000000', actorId: auth.userId, action: `VENDOR_CHANGE_${historyAction}`, eventPayload: { request_id: params.reqId }
+    });
 
     if (parsed.action === 'reject' && parsed.restrict_vendor && auth.role === ROLES.CFO) {
       await supabaseAdmin.from('vendor_history').insert([{
@@ -121,9 +122,9 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
         details: { reason: parsed.reason, request_id: request.id }
       }]);
 
-      await auth.supabase.from('audit_logs').insert([{
-        company_id: auth.companyId, wire_id: '00000000-0000-0000-0000-000000000000', actor_id: auth.userId, action: 'VENDOR_RESTRICTED', new_hash: 'SYSTEM'
-      }]);
+      await appendAuditLog(auth.supabase, {
+        companyId: auth.companyId, wireId: '00000000-0000-0000-0000-000000000000', actorId: auth.userId, action: 'VENDOR_RESTRICTED', eventPayload: { vendor_id: reqData.vendor_id }
+      });
     }
 
     
