@@ -77,3 +77,82 @@ export async function appendAuditLog(
   }
   throw new Error("Failed to append audit log after multiple concurrent attempts");
 }
+
+export async function verifyCompanyChain(
+  supabase: SupabaseClient,
+  companyId: string,
+  periodStart?: string,
+  periodEnd?: string
+): Promise<{
+  totalRecords: number;
+  validCount: number;
+  invalidIds: string[];
+  historicalPlaceholderCount: number;
+  recordResults: Record<string, boolean>;
+}> {
+  let expectedPrev = computeGenesisHash(companyId);
+  let offset = 0;
+  const limit = 1000;
+
+  let totalRecords = 0;
+  let validCount = 0;
+  const invalidIds: string[] = [];
+  let historicalPlaceholderCount = 0;
+  const recordResults: Record<string, boolean> = {};
+
+  const start = periodStart ? new Date(periodStart).getTime() : null;
+  const end = periodEnd ? new Date(periodEnd).getTime() : null;
+
+  while (true) {
+    const { data: logs, error } = await supabase
+      .from('audit_logs')
+      .select('id, previous_hash, new_hash, event_payload, created_at')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    if (!logs || logs.length === 0) break;
+
+    for (const log of logs) {
+      let valid = true;
+      const isHistoricalPlaceholder = !log.event_payload && (
+        !log.new_hash ||
+        log.new_hash === 'SYSTEM' ||
+        log.new_hash === 'INITIAL_STATE' ||
+        (!log.new_hash.startsWith('0x') && log.new_hash.length < 64)
+      );
+
+      if (log.previous_hash !== expectedPrev) {
+        if (!isHistoricalPlaceholder) valid = false;
+      }
+
+      if (log.event_payload) {
+        const computedNew = computeAuditHash(log.previous_hash, log.event_payload);
+        if (computedNew !== log.new_hash) {
+          valid = false;
+        }
+      }
+
+      recordResults[log.id] = valid;
+      expectedPrev = log.new_hash;
+
+      const logTime = new Date(log.created_at).getTime();
+      const inPeriod = (!start || logTime >= start) && (!end || logTime <= end);
+
+      if (inPeriod) {
+        totalRecords++;
+        if (valid) validCount++;
+        else invalidIds.push(log.id);
+
+        if (isHistoricalPlaceholder) historicalPlaceholderCount++;
+      }
+    }
+
+    if (logs.length < limit) break;
+    offset += limit;
+  }
+
+  return { totalRecords, validCount, invalidIds, historicalPlaceholderCount, recordResults };
+}

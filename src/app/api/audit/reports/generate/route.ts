@@ -1,0 +1,209 @@
+export const dynamic = "force-dynamic";
+import { NextResponse } from 'next/server';
+import { withAuth, getAdminClient } from '@/lib/api-auth';
+import { ROLES } from '@/lib/roles';
+import { getRiskTrendData } from '@/app/api/audit/analytics/risk-trend/route';
+import { getVendorLeaderboardData } from '@/app/api/audit/analytics/vendor-leaderboard/route';
+import { verifyCompanyChain, canonicalJSON, appendAuditLog } from '@/lib/audit-chain';
+import crypto from 'crypto';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+
+const PAGE_WIDTH = 595;
+const PAGE_HEIGHT = 842;
+const MARGIN = 50;
+const MAX_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
+function wrapText(text: string, font: any, size: number, maxWidth: number): string[] {
+  const words = String(text ?? '').split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(test, size) > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = test;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+export const POST = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, auth) => {
+  try {
+    const { startDate, endDate } = await req.json();
+    if (!startDate || !endDate) return NextResponse.json({ error: "startDate and endDate are required" }, { status: 400 });
+
+    const adminClient = await getAdminClient();
+
+    // 1. Fetch Company Name & User
+    const { data: comp } = await auth.supabase.from('companies').select('name').eq('id', auth.companyId).single();
+    const { data: user } = await auth.supabase.from('users').select('full_name').eq('id', auth.userId).single();
+    const companyName = comp?.name || 'Unknown Company';
+    const generatedBy = user?.full_name || 'Unknown Auditor';
+
+    // 2. Fetch Data
+    const riskData = await getRiskTrendData(auth.supabase, auth.companyId, 'day', startDate, endDate);
+    const vendorData = await getVendorLeaderboardData(auth.supabase, auth.companyId, startDate, endDate);
+    
+    let offset = 0;
+    const cases = [];
+    while (true) {
+      let q = auth.supabase.from('investigations')
+        .select('case_number, status, resolved_at, resolution_notes, vendors(name), wire_requests(vendor_name_snapshot)')
+        .eq('company_id', auth.companyId)
+        .gte('created_at', startDate)
+        .lte('created_at', endDate);
+      const { data, error } = await q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + 999);
+      if (error) throw error;
+      cases.push(...data);
+      if (data.length < 1000) break;
+      offset += 1000;
+    }
+
+    const chainData = await verifyCompanyChain(auth.supabase, auth.companyId, startDate, endDate);
+
+    // 3. Compute Hash
+    const reportData = {
+      period: { startDate, endDate },
+      totals: riskData.totals,
+      vendors: vendorData,
+      cases: cases.map(c => ({
+         case_number: c.case_number,
+         status: c.status,
+         vendor: c.vendors?.name || c.wire_requests?.vendor_name_snapshot || 'Unknown',
+         resolution: c.resolution_notes || null
+      })),
+      integrity: {
+        totalRecords: chainData.totalRecords,
+        validCount: chainData.validCount,
+        invalidIds: chainData.invalidIds,
+        historicalPlaceholderCount: chainData.historicalPlaceholderCount
+      }
+    };
+
+    const reportHash = crypto.createHash('sha256').update(canonicalJSON(reportData)).digest('hex');
+
+    // 4. Draw PDF
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    let y = PAGE_HEIGHT - MARGIN;
+
+    const dark = rgb(0.06, 0.09, 0.16);
+
+    function ensureSpace(needed: number) {
+      if (y - needed < MARGIN) {
+        page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+        y = PAGE_HEIGHT - MARGIN;
+      }
+    }
+
+    function heading(text: string) {
+      ensureSpace(40);
+      y -= 10;
+      page.drawText(text, { x: MARGIN, y, size: 14, font: bold, color: dark });
+      y -= 20;
+    }
+
+    function line(text: string, size = 10, isBold = false) {
+      const f = isBold ? bold : font;
+      const wrapped = wrapText(text, f, size, MAX_WIDTH);
+      for (const l of wrapped) {
+        ensureSpace(size + 6);
+        page.drawText(l, { x: MARGIN, y, size, font: f, color: dark });
+        y -= size + 6;
+      }
+    }
+
+    // Cover
+    page.drawText('ClearWire Compliance Report', { x: MARGIN, y, size: 20, font: bold, color: dark });
+    y -= 30;
+    line(`Company: ${companyName}`, 12, true);
+    line(`Period: ${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`);
+    line(`Generated: ${new Date().toLocaleString()}`);
+    line(`Generated By: ${generatedBy}`);
+    y -= 10;
+    line(`Report Content Hash: ${reportHash}`, 9);
+    y -= 20;
+
+    // Summary
+    heading('Summary of Wire Requests');
+    line(`Total Wires Processed: ${riskData.totals.totalWires}`);
+    line(`Approved: ${riskData.totals.statusCounts.approved || 0}`);
+    line(`Denied: ${riskData.totals.statusCounts.denied || 0}`);
+    line(`Pending / Under Review: ${(riskData.totals.statusCounts.pending || 0) + (riskData.totals.statusCounts.under_review || 0)}`);
+    line(`Frozen for Review (High Risk): ${(riskData.totals.statusCounts.frozen || 0)}`);
+
+    y -= 10;
+    heading('Risk Reason Breakdown');
+    for (const [code, count] of Object.entries(riskData.totals.reasons).sort((a: any, b: any) => b[1] - a[1])) {
+      line(`${code}: ${count}`);
+    }
+
+    // Vendors
+    heading('Vendor Risk Leaderboard (Period)');
+    if (vendorData.length === 0) {
+      line('No vendor activity in this period.');
+    } else {
+      for (const v of vendorData.slice(0, 15)) {
+        line(`${v.vendor_name} — Wires: ${v.total_wires}, Avg Risk: ${v.avg_risk_score}, Bank Flags: ${v.flag_count}`);
+      }
+      if (vendorData.length > 15) line(`... and ${vendorData.length - 15} more.`);
+    }
+
+    // Cases
+    heading('Compliance Investigations');
+    if (cases.length === 0) {
+      line('No investigations opened in this period.');
+    } else {
+      for (const c of cases) {
+        const vName = c.vendors?.name || c.wire_requests?.vendor_name_snapshot || 'Unknown';
+        line(`[${c.case_number}] ${vName} - Status: ${c.status}`);
+        if (c.status === 'resolved' && c.resolution_notes) {
+          line(`   Resolution: ${c.resolution_notes}`, 9);
+        } else if (c.status !== 'resolved') {
+          line(`   Resolution: Case remains open.`, 9);
+        }
+        y -= 5;
+      }
+    }
+
+    // Integrity
+    heading('Audit Log Integrity Attestation');
+    line(`Total audit records in period: ${chainData.totalRecords}`);
+    line(`Cryptographically verified records: ${chainData.validCount}`);
+    if (chainData.invalidIds.length > 0) {
+      line(`FAILED VERIFICATION: ${chainData.invalidIds.length} records. Chain is broken!`, 10, true);
+    } else {
+      line(`All modern records cryptographically verified: PASS`, 10, true);
+    }
+    if (chainData.historicalPlaceholderCount > 0) {
+      y -= 5;
+      line(`* Note: ${chainData.historicalPlaceholderCount} records in this period predate strict hashing and use historical placeholders.`, 9);
+    }
+
+    // 5. Append Audit Log
+    await appendAuditLog(adminClient, {
+      companyId: auth.companyId,
+      wireId: '00000000-0000-0000-0000-000000000000',
+      actorId: auth.userId,
+      action: 'COMPLIANCE_REPORT_GENERATED',
+      eventPayload: { startDate, endDate, reportHash, generatedBy }
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    return new NextResponse(Buffer.from(pdfBytes), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="compliance-report-${new Date().toISOString().split('T')[0]}.pdf"`,
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+});
