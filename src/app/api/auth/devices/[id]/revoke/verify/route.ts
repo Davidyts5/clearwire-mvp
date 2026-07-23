@@ -96,7 +96,7 @@ export const POST = withAuth([...ROLE_VALUES], async (req, { params }, auth) => 
     // Audit Logging
     await appendAuditLog(adminClient, {
       companyId: auth.companyId,
-      wireId: '00000000-0000-0000-0000-000000000000',
+      wireId: null,
       actorId: auth.userId,
       action: 'DEVICE_REVOKED',
       eventPayload: { device_id: params.id, device_name: device.device_name }

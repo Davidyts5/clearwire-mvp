@@ -29,7 +29,7 @@ export const DELETE = withAuth([ROLES.CFO], async (req, { params }, auth) => {
 
     await appendAuditLog(adminClient, {
       companyId: auth.companyId,
-      wireId: '00000000-0000-0000-0000-000000000000',
+      wireId: null,
       actorId: auth.userId,
       action: 'INVITATION_CANCELLED',
       eventPayload: { invite_id: params.id, email: invite.email }
@@ -72,7 +72,7 @@ export const PUT = withAuth([ROLES.CFO], async (req, { params }, auth) => {
 
     await appendAuditLog(adminClient, {
       companyId: auth.companyId,
-      wireId: '00000000-0000-0000-0000-000000000000',
+      wireId: null,
       actorId: auth.userId,
       action: 'INVITATION_RESENT',
       eventPayload: { invite_id: params.id, email: invite.email }

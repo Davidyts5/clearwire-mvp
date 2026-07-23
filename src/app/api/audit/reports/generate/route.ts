@@ -189,7 +189,7 @@ export const POST = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params },
     // 5. Append Audit Log
     await appendAuditLog(adminClient, {
       companyId: auth.companyId,
-      wireId: '00000000-0000-0000-0000-000000000000',
+      wireId: null,
       actorId: auth.userId,
       action: 'COMPLIANCE_REPORT_GENERATED',
       eventPayload: { startDate, endDate, reportHash, generatedBy }

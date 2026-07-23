@@ -31,7 +31,7 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, ctx, auth) =
       if (log.action.includes('POLICY')) { category = 'POLICY'; severity = 'warning'; title = 'Security Policy Modified'; }
       else if (log.action.includes('WIRE')) { category = 'WIRE'; severity = log.action.includes('FROZEN') ? 'critical' : log.action.includes('DENIED') ? 'warning' : 'info'; }
       else if (log.action.includes('VENDOR')) { category = 'VENDOR'; severity = log.action.includes('RESTRICTED') ? 'critical' : 'warning'; }
-      else if (log.action === 'CREATED' && log.wire_id !== '00000000-0000-0000-0000-000000000000') { category = 'WIRE'; title = 'Wire Drafted'; }
+      else if (log.action === 'CREATED' && log.wire_id !== null) { category = 'WIRE'; title = 'Wire Drafted'; }
       timeline.push({ id: `audit-${log.id}`, timestamp: log.created_at, category, severity, title, message: log.action.includes('POLICY') ? `Policy changed to: ${log.new_hash} (Was: ${log.previous_hash})` : `Immutable audit hash generated.`, actorName: log.users?.full_name || 'System', actorRole: log.users?.role || 'SYSTEM', subjectId: log.wire_id });
     });
 

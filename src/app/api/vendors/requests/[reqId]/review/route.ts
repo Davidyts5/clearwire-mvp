@@ -110,7 +110,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
     }]);
 
     await appendAuditLog(auth.supabase, {
-      companyId: auth.companyId, wireId: '00000000-0000-0000-0000-000000000000', actorId: auth.userId, action: `VENDOR_CHANGE_${historyAction}`, eventPayload: { request_id: params.reqId }
+      companyId: auth.companyId, wireId: null, actorId: auth.userId, action: `VENDOR_CHANGE_${historyAction}`, eventPayload: { request_id: params.reqId }
     });
 
     if (parsed.action === 'reject' && parsed.restrict_vendor && auth.role === ROLES.CFO) {
@@ -123,7 +123,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       }]);
 
       await appendAuditLog(auth.supabase, {
-        companyId: auth.companyId, wireId: '00000000-0000-0000-0000-000000000000', actorId: auth.userId, action: 'VENDOR_RESTRICTED', eventPayload: { vendor_id: reqData.vendor_id }
+        companyId: auth.companyId, wireId: null, actorId: auth.userId, action: 'VENDOR_RESTRICTED', eventPayload: { vendor_id: reqData.vendor_id }
       });
     }
 

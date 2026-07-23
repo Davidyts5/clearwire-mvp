@@ -99,7 +99,7 @@ export const POST = withAuth([ROLES.CFO], async (req, ctx, auth) => {
     // 4. WORM Audit Log
     await appendAuditLog(adminClient, {
       companyId: auth.companyId,
-      wireId: '00000000-0000-0000-0000-000000000000',
+      wireId: null,
       actorId: auth.userId,
       action: 'INVITATION_CREATED',
       eventPayload: { invite_id: invite.id, email: parsed.email }

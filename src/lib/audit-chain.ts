@@ -24,7 +24,7 @@ export async function appendAuditLog(
   supabase: SupabaseClient,
   params: {
     companyId: string;
-    wireId: string;
+    wireId: string | null;
     actorId: string;
     action: string;
     ipAddress?: string | null;

@@ -73,7 +73,7 @@ export const PUT = withAuth([ROLES.CFO], async (req, ctx, auth) => {
     if (body.vendor_auth_policy !== undefined && oldSettings && oldSettings.vendor_auth_policy !== body.vendor_auth_policy) {
       await appendAuditLog(auth.supabase, {
         companyId: auth.companyId,
-        wireId: '00000000-0000-0000-0000-000000000000',
+        wireId: null,
         actorId: auth.userId,
         action: 'POLICY_VENDOR_AUTH_CHANGED',
         eventPayload: { previous_policy: oldSettings.vendor_auth_policy || 'controller_any', new_policy: body.vendor_auth_policy }

@@ -107,7 +107,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, { params }, auth) => {
 
     // WORM Audit Log
     await appendAuditLog(auth.supabase, {
-      companyId: auth.companyId, wireId: '00000000-0000-0000-0000-000000000000', actorId: auth.userId, action: 'VENDOR_CHANGE_REQUESTED', eventPayload: { vendor_id: params.id }
+      companyId: auth.companyId, wireId: null, actorId: auth.userId, action: 'VENDOR_CHANGE_REQUESTED', eventPayload: { vendor_id: params.id }
     });
 
     return NextResponse.json({ success: true, data: requestData });
