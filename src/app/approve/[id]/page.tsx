@@ -207,7 +207,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
     );
   }
 
-  let riskReasons: string[] = [];
+  let riskReasons: any[] = [];
   try { if (wireDetails.risk_reasons) riskReasons = JSON.parse(wireDetails.risk_reasons); } catch (e) {}
 
   return (
@@ -282,8 +282,8 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
             )}
 
             <ul className="mt-2 list-disc list-inside text-xs text-red-800 space-y-1">
-              {riskReasons.map((reason, idx) => (
-                <li key={idx}>{reason}</li>
+              {riskReasons.map((reason: any, idx: number) => (
+                <li key={idx}>{typeof reason === 'string' ? reason : reason.detail}</li>
               ))}
             </ul>
           </div>

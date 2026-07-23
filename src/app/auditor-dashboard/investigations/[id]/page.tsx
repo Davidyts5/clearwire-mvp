@@ -153,8 +153,8 @@ export default function CaseDetails({ params }: { params: { id: string } }) {
                     <div className="border-t border-slate-100 pt-4">
                       <p className="text-xs font-bold text-slate-500 uppercase mb-2">Risk Breakdown</p>
                       <ul className="list-disc pl-4 text-xs text-slate-700 space-y-1">
-                        {JSON.parse(inv.wire_requests.risk_reasons).map((r: string, i: number) => (
-                          <li key={i}>{r}</li>
+                        {JSON.parse(inv.wire_requests.risk_reasons).map((r: any, i: number) => (
+                          <li key={i}>{typeof r === 'string' ? r : r.detail}</li>
                         ))}
                       </ul>
                     </div>

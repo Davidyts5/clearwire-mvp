@@ -32,7 +32,7 @@ interface WirePayload {
 
 interface RiskResult {
   totalScore: number;
-  reasons: string[];
+  reasons: { code: string; detail: string }[];
   recommendedStatus: 'pending' | 'frozen';
 }
 
@@ -40,7 +40,7 @@ const HIGH_RISK_COUNTRY_CODES = ['RU', 'KP', 'IR', 'SY', 'CU', 'VE', 'MM'];
 
 export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Promise<RiskResult> {
   let score = 10; 
-  let reasons: string[] = [];
+  let reasons: { code: string; detail: string }[] = [];
   
   // Fix 6: Use Decimal.js for precise currency checks
   const currentAmount = new Decimal(payload.amount);
@@ -63,40 +63,40 @@ export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Pro
   // 2. BASELINE ANOMALY DETECTION
   if (currentAmount.greaterThan(100000)) {
     score += RiskFactors.HIGH_AMOUNT.score;
-    reasons.push(RiskFactors.HIGH_AMOUNT.reason);
+    reasons.push({ code: 'HIGH_AMOUNT', detail: RiskFactors.HIGH_AMOUNT.reason });
   }
 
   const currentHour = new Date().getHours();
   if (currentHour < 7 || currentHour > 19) {
     score += RiskFactors.AFTER_HOURS.score;
-    reasons.push(RiskFactors.AFTER_HOURS.reason);
+    reasons.push({ code: 'AFTER_HOURS', detail: RiskFactors.AFTER_HOURS.reason });
   }
 
   if (payload.destination_country && payload.destination_country !== 'US') {
     score += RiskFactors.INTERNATIONAL.score;
-    reasons.push(`${RiskFactors.INTERNATIONAL.reason} (${payload.destination_country})`);
+    reasons.push({ code: 'INTERNATIONAL', detail: `${RiskFactors.INTERNATIONAL.reason} (${payload.destination_country})` });
   }
 
   // 3. HARD POLICY ENFORCEMENT (Custom Rules)
   if (riskProfile === 'custom') {
     if (settings.freeze_missing_invoice && !payload.has_invoice) {
       score += RiskFactors.POLICY_NO_INVOICE.score;
-      reasons.push(RiskFactors.POLICY_NO_INVOICE.reason);
+      reasons.push({ code: 'POLICY_NO_INVOICE', detail: RiskFactors.POLICY_NO_INVOICE.reason });
     }
     
     if (settings.freeze_international_payment && payload.destination_country && payload.destination_country !== 'US') {
       score += RiskFactors.POLICY_INTERNATIONAL.score;
-      reasons.push(`${RiskFactors.POLICY_INTERNATIONAL.reason} (${payload.destination_country})`);
+      reasons.push({ code: 'POLICY_INTERNATIONAL', detail: `${RiskFactors.POLICY_INTERNATIONAL.reason} (${payload.destination_country})` });
     }
 
     if (settings.freeze_high_risk_countries && payload.destination_country && HIGH_RISK_COUNTRY_CODES.includes(payload.destination_country.toUpperCase())) {
       score += RiskFactors.HIGH_RISK_COUNTRY.score;
-      reasons.push(`${RiskFactors.HIGH_RISK_COUNTRY.reason} (${payload.destination_country})`);
+      reasons.push({ code: 'HIGH_RISK_COUNTRY', detail: `${RiskFactors.HIGH_RISK_COUNTRY.reason} (${payload.destination_country})` });
     }
 
     if (settings.freeze_above_amount && currentAmount.greaterThanOrEqualTo(settings.freeze_amount_threshold || 999999999)) {
       score += RiskFactors.POLICY_ABOVE_THRESHOLD.score;
-      reasons.push(`${RiskFactors.POLICY_ABOVE_THRESHOLD.reason} (Threshold: $${settings.freeze_amount_threshold})`);
+      reasons.push({ code: 'POLICY_ABOVE_THRESHOLD', detail: `${RiskFactors.POLICY_ABOVE_THRESHOLD.reason} (Threshold: $${settings.freeze_amount_threshold})` });
     }
   }
 
@@ -112,18 +112,18 @@ export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Pro
       let isBankChanged = false;
       if (payload.account_number && vendorRec.account_number && payload.account_number !== vendorRec.account_number) {
         score += RiskFactors.BANK_CHANGED.score;
-        reasons.push(`${RiskFactors.BANK_CHANGED.reason} (Expected: *${vendorRec.account_number.slice(-4)}, Received: *${payload.account_number.slice(-4)})`);
+        reasons.push({ code: 'BANK_CHANGED', detail: `${RiskFactors.BANK_CHANGED.reason} (Expected: *${vendorRec.account_number.slice(-4)}, Received: *${payload.account_number.slice(-4)})` });
         isBankChanged = true;
       }
       if (payload.swift_bic && vendorRec.swift_bic && payload.swift_bic !== vendorRec.swift_bic) {
         score += RiskFactors.SWIFT_CHANGED.score;
-        reasons.push(RiskFactors.SWIFT_CHANGED.reason);
+        reasons.push({ code: 'SWIFT_CHANGED', detail: RiskFactors.SWIFT_CHANGED.reason });
         isBankChanged = true;
       }
 
       if (isBankChanged && riskProfile === 'custom' && settings.freeze_bank_changes) {
         score += RiskFactors.POLICY_BANK_CHANGE.score;
-        if (!reasons.includes(RiskFactors.POLICY_BANK_CHANGE.reason)) reasons.push(RiskFactors.POLICY_BANK_CHANGE.reason);
+        if (!reasons.some(r => r.code === 'POLICY_BANK_CHANGE')) reasons.push({ code: 'POLICY_BANK_CHANGE', detail: RiskFactors.POLICY_BANK_CHANGE.reason });
       }
     }
 
@@ -139,7 +139,7 @@ export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Pro
       // It's an existing vendor in the DB, but they have zero wire history
       if (riskProfile === 'custom' && settings.freeze_first_payment) {
         score += RiskFactors.POLICY_FIRST_PAYMENT.score;
-        reasons.push(RiskFactors.POLICY_FIRST_PAYMENT.reason);
+        reasons.push({ code: 'POLICY_FIRST_PAYMENT', detail: RiskFactors.POLICY_FIRST_PAYMENT.reason });
       }
     } else {
       const recentDuplicate = vendorHistory.find((w: any) => 
@@ -148,7 +148,7 @@ export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Pro
       );
       if (recentDuplicate) {
         score += RiskFactors.DUPLICATE_AMOUNT.score;
-        reasons.push(RiskFactors.DUPLICATE_AMOUNT.reason);
+        reasons.push({ code: 'DUPLICATE_AMOUNT', detail: RiskFactors.DUPLICATE_AMOUNT.reason });
       }
       
       const last24hCount = vendorHistory.filter((w: any) => 
@@ -157,17 +157,17 @@ export async function evaluateWireRisk(dbClient: any, payload: WirePayload): Pro
       
       if (last24hCount >= 3) {
         score += RiskFactors.VELOCITY_SPIKE.score;
-        reasons.push(`${RiskFactors.VELOCITY_SPIKE.reason} (${last24hCount} requests in 24h)`);
+        reasons.push({ code: 'VELOCITY_SPIKE', detail: `${RiskFactors.VELOCITY_SPIKE.reason} (${last24hCount} requests in 24h)` });
       }
     }
   } else {
     // Brand new vendor
     score += RiskFactors.NEW_VENDOR.score;
-    reasons.push(RiskFactors.NEW_VENDOR.reason);
+    reasons.push({ code: 'NEW_VENDOR', detail: RiskFactors.NEW_VENDOR.reason });
 
     if (riskProfile === 'custom' && settings.freeze_first_payment) {
       score += RiskFactors.POLICY_FIRST_PAYMENT.score;
-      reasons.push(RiskFactors.POLICY_FIRST_PAYMENT.reason);
+      reasons.push({ code: 'POLICY_FIRST_PAYMENT', detail: RiskFactors.POLICY_FIRST_PAYMENT.reason });
     }
   }
 
