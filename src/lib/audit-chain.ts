@@ -117,12 +117,7 @@ export async function verifyCompanyChain(
 
     for (const log of logs) {
       let valid = true;
-      const isHistoricalPlaceholder = !log.event_payload && (
-        !log.new_hash ||
-        log.new_hash === 'SYSTEM' ||
-        log.new_hash === 'INITIAL_STATE' ||
-        (!log.new_hash.startsWith('0x') && log.new_hash.length < 64)
-      );
+      const isHistoricalPlaceholder = !log.event_payload;
 
       if (log.previous_hash !== expectedPrev) {
         if (!isHistoricalPlaceholder) valid = false;
