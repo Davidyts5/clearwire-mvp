@@ -1,0 +1,1 @@
+These files are historical record only. They must NEVER be run against a live database — running schema.sql will DROP every core table via CASCADE. The current live schema lives in Supabase; these files predate proper migration tooling and are kept only so past changes are traceable.
