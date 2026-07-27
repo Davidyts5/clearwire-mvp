@@ -86,7 +86,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     // Fix 1: Case-insensitive vendor lookup
     const { data: vendorData } = await auth.supabase
       .from('vendors')
-      .select('id, name, account_number, status')
+      .select('id, name, account_number, status, phone_number')
       .ilike('name', vendorTrimmed)
       .eq('company_id', auth.companyId)
       .single();
@@ -151,6 +151,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       vendor_name: vendorTrimmed,
       account_number_snapshot: parsed.account_number,
       swift_bic_snapshot: parsed.swift_bic,
+      phone_number_snapshot: vendorData?.phone_number || null,
       invoice_path: storedInvoicePath,
       amount: parseFloat(parsed.amount),
       purpose: parsed.purpose,

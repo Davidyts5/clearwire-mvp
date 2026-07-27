@@ -125,6 +125,7 @@ export default function VendorProfile({ params }: { params: { id: string } }) {
                 <div className="bg-slate-100 border border-slate-200 p-3 rounded-lg font-mono text-slate-800 font-semibold">{vendor.account_number || "N/A"}</div>
               </div>
               <div><p className="text-sm font-medium text-slate-500 mb-1">SWIFT / BIC</p><p className="font-mono text-lg font-bold text-slate-900">{vendor.swift_bic || "N/A"}</p></div>
+              <div><p className="text-sm font-medium text-slate-500 mb-1">Phone Number</p><p className="font-mono text-lg font-bold text-slate-900">{vendor.phone_number || "N/A"}</p></div>
               <div><p className="text-sm font-medium text-slate-500 mb-1">Payment Instructions</p><p className="text-sm text-slate-800 bg-white p-3 rounded border border-slate-200">{vendor.payment_instructions || "None"}</p></div>
             </div>
             
@@ -175,6 +176,7 @@ export default function VendorProfile({ params }: { params: { id: string } }) {
                   <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Beneficiary / Account Name</label><input name="account_name" defaultValue={vendor.account_name} className="w-full border p-2 rounded text-sm" /></div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Bank Account / IBAN</label><input required name="account_number" defaultValue={vendor.account_number} className="w-full border p-2 rounded font-mono text-sm" /></div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">SWIFT / BIC</label><input name="swift_bic" defaultValue={vendor.swift_bic} className="w-full border p-2 rounded font-mono text-sm uppercase" /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Phone Number</label><input name="phone_number" defaultValue={vendor.phone_number} type="tel" className="w-full border p-2 rounded font-mono text-sm" placeholder="+1 555 123 4567" /></div>
                   <div className="grid grid-cols-2 gap-3">
                     <div><label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Country</label><select required name="country" defaultValue={vendor.country || "US"} className="w-full border p-2 rounded bg-white text-sm">
                       {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}

@@ -13,7 +13,7 @@ const NewVendorSchema = z.object({
   country: z.string().min(1, "Country is required"),
   currency: z.string().min(1, "Currency is required"),
   contact_email: z.string().email("Invalid email").optional().or(z.literal('')),
-  address: z.string().optional().or(z.literal(''))
+  address: z.string().optional().or(z.literal('')), phone_number: z.string().optional().or(z.literal(''))
 });
 
 // Fetch the Master Vendor List for the Clerk Dashboard
@@ -25,7 +25,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
 
     const { data, error } = await auth.supabase
       .from('vendors')
-      .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status, address, created_at')
+      .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status, address, phone_number, created_at')
       .eq('company_id', auth.companyId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit);

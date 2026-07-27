@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2, FileText, MessageSquare } from "lucide-react";
+import { ShieldCheck, Fingerprint, Lock, AlertTriangle, CheckCircle, XCircle, Search, Loader2, FileText, MessageSquare, PhoneCall } from "lucide-react";
 import Link from "next/link";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { createClient } from "@/lib/supabase";
@@ -20,6 +20,12 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
   const [declineReason, setDeclineReason] = useState("Needs Correction (Amount/Vendor)");
   const [declineNotes, setDeclineNotes] = useState("");
   const [isSubmittingDecline, setIsSubmittingDecline] = useState(false);
+  
+  const [callbackRecord, setCallbackRecord] = useState<any>(null);
+  const [contactName, setContactName] = useState("");
+  const [callbackNotes, setCallbackNotes] = useState("");
+  const [isSubmittingCallback, setIsSubmittingCallback] = useState(false);
+  const [callbackError, setCallbackError] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -36,7 +42,9 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         
         setWireDetails(json.data);
 
-        const supabase = createClient();
+        const { data: cbData } = await supabase.from('vendor_callback_verifications').select('*').eq('wire_id', params.id).single();
+        if (cbData) setCallbackRecord(cbData);
+
 
         if (json.data.vendor_id) {
           const { data: vData } = await supabase.from('vendors').select('*').eq('id', json.data.vendor_id).single();
@@ -207,6 +215,43 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
     );
   }
 
+  
+  let needsCallback = false;
+  if (wireDetails && wireDetails.risk_reasons) {
+    try {
+      const reasons = typeof wireDetails.risk_reasons === 'string' ? JSON.parse(wireDetails.risk_reasons) : wireDetails.risk_reasons;
+      reasons.forEach((r: any) => {
+        if (typeof r === 'object' && r !== null) {
+          if (r.code === 'BANK_CHANGED' || r.code === 'SWIFT_CHANGED') needsCallback = true;
+        } else if (typeof r === 'string') {
+          if (r.includes('BANK_CHANGED') || r.includes('SWIFT_CHANGED') || r.includes('Bank Account / IBAN Changed') || r.includes('SWIFT/BIC Routing Changed')) needsCallback = true;
+        }
+      });
+    } catch (e) {}
+  }
+
+  const isCallbackPending = needsCallback && !callbackRecord;
+
+  const handleCallbackSubmit = async (e: any) => {
+    e.preventDefault();
+    setIsSubmittingCallback(true);
+    setCallbackError(null);
+    try {
+      const res = await fetch(`/api/wires/${params.id}/callback-verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone_number_called: wireDetails.phone_number_snapshot || vendorDetails?.phone_number, contact_name: contactName, notes: callbackNotes })
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to submit callback verification');
+      setCallbackRecord(json.data);
+    } catch (err: any) {
+      setCallbackError(err.message);
+    } finally {
+      setIsSubmittingCallback(false);
+    }
+  };
+
   let riskReasons: any[] = [];
   try { if (wireDetails.risk_reasons) riskReasons = JSON.parse(wireDetails.risk_reasons); } catch (e) {}
 
@@ -289,6 +334,75 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
           </div>
         )}
 
+        
+        {needsCallback && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8 mt-6">
+            <div className="p-5 border-b border-slate-100 bg-amber-50/50">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <PhoneCall className="text-amber-600" size={20} /> Vendor Callback Verification Required
+              </h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Because this wire request includes a change to banking or routing details, policy requires an out-of-band phone call to the vendor's pre-existing phone number.
+              </p>
+            </div>
+            
+            <div className="p-6">
+              {(!wireDetails.phone_number_snapshot && !vendorDetails?.phone_number) ? (
+                <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm font-medium flex gap-2">
+                   <AlertTriangle size={20} className="shrink-0"/>
+                   No phone number is on file for this vendor. Please edit the vendor profile to add their phone number before this verification can be completed.
+                </div>
+              ) : callbackRecord ? (
+                 <div className="p-4 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 text-sm font-medium">
+                   <div className="flex items-center gap-2 font-bold mb-2"><CheckCircle size={18}/> Callback Verification Completed</div>
+                   <div className="grid grid-cols-2 gap-4 mt-2">
+                     <div><span className="text-xs text-emerald-600 uppercase block">Called Number</span> {callbackRecord.phone_number_called}</div>
+                     <div><span className="text-xs text-emerald-600 uppercase block">Spoke With</span> {callbackRecord.contact_name}</div>
+                     <div className="col-span-2"><span className="text-xs text-emerald-600 uppercase block">Notes</span> {callbackRecord.notes}</div>
+                   </div>
+                 </div>
+              ) : (
+                <form onSubmit={handleCallbackSubmit} className="space-y-4">
+                  {callbackError && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm font-medium mb-4">{callbackError}</div>
+                  )}
+                  
+                  <div className="bg-slate-50 p-4 rounded border border-slate-200 text-center">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Number to Call {!wireDetails.phone_number_snapshot ? '(Current on file)' : '(From Snapshot)'}
+                    </p>
+                    <p className="text-2xl font-bold font-mono tracking-tight text-slate-900">
+                      {wireDetails.phone_number_snapshot || vendorDetails?.phone_number}
+                    </p>
+                    {!wireDetails.phone_number_snapshot && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        Current number on file (not verified at time of this wire)
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Who did you speak to?</label>
+                    <input required value={contactName} onChange={e=>setContactName(e.target.value)} className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="e.g. Jane Doe (Accounts Receivable)" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Notes / Confirmation Details</label>
+                    <textarea required value={callbackNotes} onChange={e=>setCallbackNotes(e.target.value)} rows={3} className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="e.g. Confirmed new ending in *5678 replaces old account ending in *1234." />
+                  </div>
+                  
+                  <div className="pt-2 flex justify-end">
+                     <button type="submit" disabled={isSubmittingCallback} className="bg-blue-600 text-white font-bold px-6 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm">
+                       {isSubmittingCallback ? <Loader2 size={16} className="animate-spin" /> : <PhoneCall size={16} />} Record Verification
+                     </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+
         {status === 'under_review' && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
             <strong>Security Override Active.</strong> You have accepted the risk and cleared this transaction for final authorization.
@@ -297,13 +411,13 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
 
         <div className="space-y-3 pt-2">
           {status === 'frozen' ? (
-            <button onClick={handleReviewAction} className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 shadow-sm">
-              <Search size={18} /> Accept Risk & Unfreeze
+            <button onClick={handleReviewAction} disabled={isCallbackPending} className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 shadow-sm">
+              {isCallbackPending ? <Lock size={18} /> : <Search size={18} />} {isCallbackPending ? "Callback Required" : "Accept Risk & Unfreeze"}
             </button>
           ) : (
-            <button onClick={handlePasskeyAuth} disabled={status === "verifying"} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl py-4 font-semibold flex items-center justify-center gap-2 shadow-md">
-              {status === "verifying" ? <Loader2 className="animate-spin" /> : <Fingerprint />}
-              Sign with Passkey
+            <button onClick={handlePasskeyAuth} disabled={status === "verifying" || isCallbackPending} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl py-4 font-semibold flex items-center justify-center gap-2 shadow-md">
+              {status === "verifying" ? <Loader2 className="animate-spin" /> : isCallbackPending ? <Lock size={18} /> : <Fingerprint />}
+              {isCallbackPending ? "Callback Required" : "Sign with Passkey"}
             </button>
           )}
 

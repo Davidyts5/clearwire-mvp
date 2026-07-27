@@ -38,6 +38,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, { params }, auth) => {
       currency: formData.get('currency') as string,
       contact_email: formData.get('contact_email') as string || undefined,
       address: formData.get('address') as string || undefined,
+      phone_number: formData.get('phone_number') as string || undefined,
       payment_instructions: formData.get('payment_instructions') as string || undefined,
     };
 
@@ -79,6 +80,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, { params }, auth) => {
       currency: vendor.currency,
       contact_email: vendor.contact_email,
       address: vendor.address,
+      phone_number: vendor.phone_number,
       payment_instructions: vendor.payment_instructions
     };
 

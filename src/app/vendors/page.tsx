@@ -151,6 +151,7 @@ export default function VendorsPage() {
               <div><label className="block text-sm font-bold text-slate-700 mb-1">Account Name</label><input required name="account_name" className="w-full border p-2 rounded" /></div>
               <div><label className="block text-sm font-bold text-slate-700 mb-1">IBAN / Account Number</label><input required name="account_number" className="w-full border p-2 rounded font-mono" /></div>
               <div><label className="block text-sm font-bold text-slate-700 mb-1">SWIFT / BIC (Optional)</label><input name="swift_bic" className="w-full border p-2 rounded font-mono uppercase" /></div>
+              <div><label className="block text-sm font-bold text-slate-700 mb-1">Phone Number (Optional)</label><input name="phone_number" type="tel" className="w-full border p-2 rounded font-mono" placeholder="+1 555 123 4567" /></div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-sm font-bold text-slate-700 mb-1">Country</label><select required name="country" defaultValue="US" className="w-full border p-2 rounded bg-slate-50 text-sm font-medium">

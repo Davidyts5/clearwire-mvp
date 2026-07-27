@@ -12,12 +12,45 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
   await verifySegregationOfDuties(auth.supabase, params.id, auth.userId);
 
-  // Fetch the vendor_id and snapshots so the self-healing logic has the data it needs
+
+  // Fetch the wire data, including the new phone_number_snapshot and risk_reasons
   const { data: wireData } = await auth.supabase
     .from('wire_requests')
-    .select('status, amount, vendor_id, account_number_snapshot, swift_bic_snapshot')
+    .select('status, amount, vendor_id, account_number_snapshot, swift_bic_snapshot, phone_number_snapshot, risk_reasons')
     .eq('id', params.id)
     .single();
+
+  if (!wireData) return NextResponse.json({ error: 'Wire not found' }, { status: 404 });
+
+  // Phase 4: Gate approval on a callback record existing
+  let needsCallback = false;
+  if (wireData.risk_reasons) {
+    try {
+      const reasons = typeof wireData.risk_reasons === 'string' ? JSON.parse(wireData.risk_reasons) : wireData.risk_reasons;
+      reasons.forEach((r: any) => {
+        if (typeof r === 'object' && r !== null) {
+          if (r.code === 'BANK_CHANGED' || r.code === 'SWIFT_CHANGED') needsCallback = true;
+        } else if (typeof r === 'string') {
+          if (r.includes('BANK_CHANGED') || r.includes('SWIFT_CHANGED') || r.includes('Bank Account / IBAN Changed') || r.includes('SWIFT/BIC Routing Changed')) {
+             needsCallback = true;
+          }
+        }
+      });
+    } catch (e) {}
+  }
+
+  if (needsCallback) {
+    const { data: callbackRecord } = await auth.supabase
+      .from('vendor_callback_verifications')
+      .select('id')
+      .eq('wire_id', params.id)
+      .single();
+
+    if (!callbackRecord) {
+      return NextResponse.json({ error: 'Callback verification required before this wire can be approved' }, { status: 400 });
+    }
+  }
+
   
   if (auth.role === ROLES.CONTROLLER) {
     const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();
