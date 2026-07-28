@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckSquare, Loader2, FileText, CheckCircle, XCircle, ArrowRight, Eye, ShieldCheck, AlertTriangle } from "lucide-react";
+import { CheckSquare, Loader2, FileText, CheckCircle, XCircle, ArrowRight, Eye, ShieldCheck, AlertTriangle, PhoneCall } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { ROLES } from "@/lib/roles";
 import DataFilters, { FilterConfig } from "@/components/DataFilters";
@@ -18,6 +18,48 @@ export default function VendorRequestsPage() {
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [rejectFlow, setRejectFlow] = useState(false);
   const [restrictVendor, setRestrictVendor] = useState(false);
+  const [callbackRecord, setCallbackRecord] = useState<any>(null);
+  const [contactName, setContactName] = useState("");
+  const [callbackNotes, setCallbackNotes] = useState("");
+  const [isSubmittingCallback, setIsSubmittingCallback] = useState(false);
+  const [callbackError, setCallbackError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (viewingRequest) {
+      const fetchCb = async () => {
+        const supabase = createClient();
+        const { data } = await supabase.from('vendor_callback_verifications').select('*').eq('change_request_id', viewingRequest.id).single();
+        if (data) setCallbackRecord(data);
+        else setCallbackRecord(null);
+      };
+      fetchCb();
+    } else {
+      setCallbackRecord(null);
+      setContactName("");
+      setCallbackNotes("");
+    }
+  }, [viewingRequest]);
+
+  const handleCallbackSubmit = async (e: any) => {
+    e.preventDefault();
+    setIsSubmittingCallback(true);
+    setCallbackError(null);
+    try {
+      const res = await fetch(`/api/vendors/requests/${viewingRequest.id}/callback-verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone_number_called: viewingRequest.old_data?.phone_number, contact_name: contactName, notes: callbackNotes })
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to submit callback verification');
+      setCallbackRecord(json.data);
+    } catch (err: any) {
+      setCallbackError(err.message);
+    } finally {
+      setIsSubmittingCallback(false);
+    }
+  };
+
 
   const fetchRequests = async () => {
     setIsLoading(true);
@@ -216,13 +258,17 @@ export default function VendorRequestsPage() {
 
             <div className="p-6 border-t border-slate-100 bg-white shrink-0">
               
+
               {((viewingRequest.status === "pending" && userRole === ROLES.CONTROLLER) || (viewingRequest.status === "awaiting_cfo" && userRole === ROLES.CFO)) ? (
                 (() => {
                   const isBankChange = viewingRequest.old_data?.account_number !== viewingRequest.new_data?.account_number || viewingRequest.old_data?.swift_bic !== viewingRequest.new_data?.swift_bic;
                   const canControllerApprove = vendorAuthPolicy === 'controller_any' || (vendorAuthPolicy === 'cfo_bank_only' && !isBankChange);
                   const showApproveButton = userRole === ROLES.CFO || canControllerApprove;
+                  const hasPhoneNumber = !!viewingRequest.old_data?.phone_number;
+                  const isCallbackPending = isBankChange && !callbackRecord;
 
                   return rejectFlow ? (
+
                   <div className="space-y-4 bg-red-50 p-4 rounded-xl border border-red-100">
                     <h3 className="font-bold text-red-800 flex items-center gap-2"><AlertTriangle size={18}/> Confirm Rejection</h3>
                     <div>
@@ -256,21 +302,80 @@ export default function VendorRequestsPage() {
                     </div>
                   </div>
                 ) : (
+
                   <div className="space-y-4">
+                    {isBankChange && (
+                      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+                        <div className="p-4 border-b border-slate-100 bg-amber-50/50">
+                          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                            <PhoneCall className="text-amber-600" size={18} /> Vendor Callback Verification Required
+                          </h2>
+                          <p className="text-xs text-slate-600 mt-1">
+                            Because this request alters banking or routing details, policy requires an out-of-band phone call to the vendor's pre-existing phone number.
+                          </p>
+                        </div>
+                        
+                        <div className="p-5">
+                          {!hasPhoneNumber ? (
+                            <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm font-medium flex gap-2">
+                               <AlertTriangle size={20} className="shrink-0"/>
+                               No verified phone number exists for this vendor. Source one independently (e.g., from a contract or invoice — not from this request) and add it to the vendor's profile before this change can be approved.
+                            </div>
+                          ) : callbackRecord ? (
+                             <div className="p-4 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 text-sm font-medium">
+                               <div className="flex items-center gap-2 font-bold mb-2"><CheckCircle size={18}/> Callback Verification Completed</div>
+                               <div className="grid grid-cols-2 gap-4 mt-2">
+                                 <div><span className="text-xs text-emerald-600 uppercase block">Called Number</span> {callbackRecord.phone_number_called}</div>
+                                 <div><span className="text-xs text-emerald-600 uppercase block">Spoke With</span> {callbackRecord.contact_name}</div>
+                                 <div className="col-span-2"><span className="text-xs text-emerald-600 uppercase block">Notes</span> {callbackRecord.notes}</div>
+                               </div>
+                             </div>
+                          ) : (
+                            <form onSubmit={handleCallbackSubmit} className="space-y-4">
+                              {callbackError && (
+                                <div className="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 text-sm font-medium mb-4">{callbackError}</div>
+                              )}
+                              
+                              <div className="bg-slate-50 p-4 rounded border border-slate-200 text-center">
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Number to Call (From File)</p>
+                                <p className="text-2xl font-bold font-mono tracking-tight text-slate-900">{viewingRequest.old_data.phone_number}</p>
+                              </div>
+                              
+                              <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Who did you speak to?</label>
+                                <input required value={contactName} onChange={e=>setContactName(e.target.value)} className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="e.g. Jane Doe (Accounts Receivable)" />
+                              </div>
+                              
+                              <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Notes / Confirmation Details</label>
+                                <textarea required value={callbackNotes} onChange={e=>setCallbackNotes(e.target.value)} rows={3} className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="e.g. Confirmed new ending in *5678 replaces old account ending in *1234." />
+                              </div>
+                              
+                              <div className="pt-2 flex justify-end">
+                                 <button type="submit" disabled={isSubmittingCallback} className="bg-blue-600 text-white font-bold px-6 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm">
+                                   {isSubmittingCallback ? <Loader2 size={16} className="animate-spin" /> : <PhoneCall size={16} />} Record Verification
+                                 </button>
+                              </div>
+                            </form>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <input type="text" placeholder="Optional notes for approval..." value={actionReason} onChange={(e) => setActionReason(e.target.value)} className="w-full border p-2 rounded text-sm bg-slate-50" />
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                       <button type="button" onClick={() => setViewingRequest(null)} className="text-slate-500 font-medium text-sm">Cancel</button>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <button onClick={() => setRejectFlow(true)} className="bg-red-100 text-red-700 hover:bg-red-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Reject...</button>
-                        {userRole === ROLES.CONTROLLER && <button onClick={() => handleAction("escalate")} disabled={isSubmitting} className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors">Escalate to CFO</button>}
+                        {userRole === ROLES.CONTROLLER && <button onClick={() => handleAction("escalate")} disabled={isSubmitting || (isBankChange && (!hasPhoneNumber || isCallbackPending))} className="bg-purple-100 text-purple-700 hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-bold text-sm transition-colors">Escalate to CFO</button>}
                         {showApproveButton ? (
-                          <button onClick={() => handleAction("approve")} disabled={isSubmitting} className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm">Authorize & Update</button>
+                          <button onClick={() => handleAction("approve")} disabled={isSubmitting || (isBankChange && (!hasPhoneNumber || isCallbackPending))} className="bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm">Authorize & Update</button>
                         ) : (
                           <div className="bg-amber-50 text-amber-800 px-4 py-2 rounded-lg font-bold text-sm border border-amber-200">CFO Authorization Required</div>
                         )}
                       </div>
                     </div>
                   </div>
+
                 )
                 })()
               ) : (

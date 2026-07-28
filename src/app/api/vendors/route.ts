@@ -23,20 +23,38 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
     const limit = Math.min(Number(searchParams.get('limit')) || 50, 100);
     const offset = Number(searchParams.get('offset')) || 0;
 
+
     const { data, error } = await auth.supabase
       .from('vendors')
-      .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status, address, phone_number, created_at')
+      .select('id, name, account_name, account_number, bank_name, swift_bic, country, currency, contact_email, status, address, phone_number, created_at, vendor_change_requests(status, old_data, new_data)')
       .eq('company_id', auth.companyId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit);
 
     if (error) throw error;
 
+    // Post-process to inject has_pending_bank_change
+    const processedData = data.map(v => {
+        let hasPendingBankChange = false;
+        if (v.vendor_change_requests) {
+            v.vendor_change_requests.forEach((req: any) => {
+                if (req.status === 'pending' || req.status === 'awaiting_cfo') {
+                    const isBankChange = req.old_data?.account_number !== req.new_data?.account_number || req.old_data?.swift_bic !== req.new_data?.swift_bic;
+                    if (isBankChange) hasPendingBankChange = true;
+                }
+            });
+        }
+        // Remove the heavy payload before sending to client
+        delete v.vendor_change_requests;
+        return { ...v, has_pending_bank_change: hasPendingBankChange };
+    });
+
+
     const hasMore = data.length > limit;
     const headers = new Headers();
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
-    return NextResponse.json({ success: true, data: data.slice(0, limit), hasMore }, { status: 200, headers });
+    return NextResponse.json({ success: true, data: processedData.slice(0, limit), hasMore }, { status: 200, headers });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

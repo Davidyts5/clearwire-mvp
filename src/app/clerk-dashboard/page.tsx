@@ -215,13 +215,29 @@ export default function ClerkDashboard() {
                   ))}
                 </select>
               </div>
-              {selectedVendorId && (
-                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
-                  <div><span className="text-xs font-bold text-slate-500 uppercase">Bank Account / IBAN</span><div className="font-mono text-sm font-semibold text-slate-800">{accountNumber || "N/A"}</div></div>
-                  <div><span className="text-xs font-bold text-slate-500 uppercase">SWIFT / BIC</span><div className="font-mono text-sm font-semibold text-slate-800">{swiftBic || "N/A"}</div></div>
-                </div>
-              )}
-              <div><label className="block text-sm font-bold text-slate-700 mb-1 mt-4">Amount (USD)</label><input required name="amount" type="number" min="1" step="0.01" className="w-full border p-2 rounded font-mono" /></div>
+              {selectedVendorId && (() => {
+                const selectedVendor = vendors.find(v => v.id === selectedVendorId);
+                const hasPendingChange = selectedVendor?.has_pending_bank_change;
+
+                return (
+                  <div className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
+                      <div><span className="text-xs font-bold text-slate-500 uppercase">Bank Account / IBAN</span><div className="font-mono text-sm font-semibold text-slate-800">{accountNumber || "N/A"}</div></div>
+                      <div><span className="text-xs font-bold text-slate-500 uppercase">SWIFT / BIC</span><div className="font-mono text-sm font-semibold text-slate-800">{swiftBic || "N/A"}</div></div>
+                    </div>
+                    {hasPendingChange && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm font-medium flex gap-2">
+                        <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Action Required:</strong> This vendor has an unresolved bank-detail change request. New wires are paused until it is approved or rejected by a Controller/CFO.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              <div><label className="block text-sm font-bold text-slate-700 mb-1 mt-4">Amount (USD)</label><input required disabled={vendors.find(v => v.id === selectedVendorId)?.has_pending_bank_change} name="amount" type="number" min="1" step="0.01" className="w-full border p-2 rounded font-mono disabled:bg-slate-100 disabled:cursor-not-allowed" /></div>
+
               <div><label className="block text-sm font-bold text-slate-700 mb-1">Purpose / Invoice Reference</label><input required name="purpose" className="w-full border p-2 rounded" placeholder="Invoice #INV-2026-991" /></div>
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                 <label className="block text-sm font-bold text-slate-700 mb-1">Attach Source Invoice (Optional)</label>

@@ -47,17 +47,32 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
     const { data: settings } = await supabaseAdmin.from('company_settings').select('vendor_auth_policy').eq('company_id', auth.companyId).single();
     const policy = settings?.vendor_auth_policy || 'controller_any';
 
+
+    const isBankChange = request.old_data.account_number !== request.new_data.account_number || request.old_data.swift_bic !== request.new_data.swift_bic;
+
     if (parsed.action === 'approve' && auth.role === ROLES.CONTROLLER) {
       if (policy === 'cfo_always') {
         return NextResponse.json({ error: 'Company policy requires CFO authorization for all vendor changes.' }, { status: 403 });
       }
       if (policy === 'cfo_bank_only') {
-        const isBankChange = request.old_data.account_number !== request.new_data.account_number || request.old_data.swift_bic !== request.new_data.swift_bic;
         if (isBankChange) {
           return NextResponse.json({ error: 'Company policy requires CFO authorization for banking changes.' }, { status: 403 });
         }
       }
     }
+
+    if (parsed.action === 'approve' && isBankChange) {
+      const { data: cbRecord } = await supabaseAdmin
+        .from('vendor_callback_verifications')
+        .select('id')
+        .eq('change_request_id', params.reqId)
+        .single();
+
+      if (!cbRecord) {
+        return NextResponse.json({ error: 'Callback verification required before this bank-detail change can be approved.' }, { status: 400 });
+      }
+    }
+
 
     let newReqStatus = '';
     let vendorUpdates = null;

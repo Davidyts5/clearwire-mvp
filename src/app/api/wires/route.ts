@@ -84,6 +84,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
     }
 
     // Fix 1: Case-insensitive vendor lookup
+
     const { data: vendorData } = await auth.supabase
       .from('vendors')
       .select('id, name, account_number, status, phone_number')
@@ -91,8 +92,26 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       .eq('company_id', auth.companyId)
       .single();
 
-    // If an insensitive match is found but the exact casing/spacing is different, require confirmation to avoid missing fraud.
+    // 3. Block new wire creation while a bank-detail change is unresolved
+    if (vendorData && vendorData.id) {
+      const { data: pendingReqs } = await auth.supabase
+        .from('vendor_change_requests')
+        .select('old_data, new_data')
+        .eq('vendor_id', vendorData.id)
+        .in('status', ['pending', 'awaiting_cfo']);
+
+      if (pendingReqs && pendingReqs.length > 0) {
+        for (const req of pendingReqs) {
+          const isBankChange = req.old_data.account_number !== req.new_data.account_number || req.old_data.swift_bic !== req.new_data.swift_bic;
+          if (isBankChange) {
+            return NextResponse.json({ error: 'This vendor has an unresolved bank-detail change request. New wires are paused until it is approved or rejected.' }, { status: 400 });
+          }
+        }
+      }
+    }
+
     if (vendorData && vendorData.name !== vendorTrimmed) {
+
         return NextResponse.json({ 
             error: `Vendor name mismatch: Did you mean "${vendorData.name}"? Please use the exact existing vendor name or confirm this is a separate vendor.` 
         }, { status: 409 });
