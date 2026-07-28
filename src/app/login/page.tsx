@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldCheck, Loader2 } from "lucide-react";
+import { Stamp, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import Link from "next/link"; 
 import { ROLES, Permissions } from "@/lib/roles";
@@ -52,49 +52,49 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-ink font-body text-parchment flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-brass/30">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <ShieldCheck size={48} className="mx-auto text-blue-600 mb-2" />
-        <h2 className="mt-2 text-center text-3xl font-bold tracking-tight text-slate-900">
+        <Stamp size={48} className="mx-auto text-brass mb-4" />
+        <h2 className="mt-2 text-center text-3xl font-bold tracking-tight text-parchment font-display">
           ClearWire Security
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-500">
+        <p className="mt-2 text-center text-sm text-muted">
           Secure B2B Payment Authorization
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-slate-200">
+        <div className="bg-panel py-8 px-4 sm:px-10 border border-brass/30">
           <form className="space-y-6" onSubmit={handleLogin}>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Corporate Email</label>
+              <label className="block text-sm font-semibold text-muted uppercase tracking-wider mb-2 font-mono">Corporate Email</label>
               <div className="mt-1">
                 <input
                   required
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                  className="block w-full appearance-none rounded-none border border-brass/50 bg-ink px-3 py-2 text-parchment placeholder-muted/50 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass sm:text-sm"
                   placeholder="ap@yourcompany.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700">Password</label>
+              <label className="block text-sm font-semibold text-muted uppercase tracking-wider mb-2 font-mono">Password</label>
               <div className="mt-1">
                 <input
                   required
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                  className="block w-full appearance-none rounded-none border border-brass/50 bg-ink px-3 py-2 text-parchment placeholder-muted/50 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass sm:text-sm"
                 />
               </div>
             </div>
 
             {error && (
-              <div className="text-red-600 text-sm font-medium bg-red-50 p-3 rounded-md border border-red-200">
+              <div className="text-parchment text-sm font-medium bg-wax p-3 rounded-none border border-wax">
                 {error}
               </div>
             )}
@@ -103,7 +103,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="flex w-full justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-70 gap-2 items-center"
+                className="flex w-full justify-center rounded-none border border-transparent bg-brass py-2.5 px-4 text-sm font-bold text-ink hover:bg-parchment focus:outline-none disabled:opacity-70 gap-2 items-center transition-colors"
               >
                 {isLoading && <Loader2 size={16} className="animate-spin" />}
                 Sign In
@@ -113,8 +113,8 @@ export default function Login() {
         </div>
 
         <div className="mt-8 text-center space-y-2">
-          <p className="text-slate-500 text-sm">
-            Not part of a workspace yet? <Link href="/signup" className="font-bold text-blue-600 hover:underline">Create Company</Link>
+          <p className="text-muted text-sm">
+            Not part of a workspace yet? <Link href="/signup" className="font-bold text-brass hover:text-parchment hover:underline">Create Company</Link>
           </p>
         </div>
       </div>

@@ -12,8 +12,20 @@ const config: Config = {
         background: "var(--background)",
         foreground: "var(--foreground)",
         primary: "#0f172a",
-        accent: "#3b82f6"
+        accent: "#3b82f6",
+        ink: "#1B1A17",
+        panel: "#23221E",
+        parchment: "#EDE8DE",
+        muted: "#A8A296",
+        wax: "#A63A2E",
+        verified: "#4E7A64",
+        brass: "#B08D57"
       },
+      fontFamily: {
+        display: ['Fraunces', 'serif'],
+        body: ['"IBM Plex Sans"', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'monospace'],
+      }
     },
   },
   plugins: [],
