@@ -138,7 +138,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       }]);
 
       await appendAuditLog(auth.supabase, {
-        companyId: auth.companyId, wireId: null, actorId: auth.userId, action: 'VENDOR_RESTRICTED', eventPayload: { vendor_id: reqData.vendor_id }
+        companyId: auth.companyId, wireId: null, actorId: auth.userId, action: 'VENDOR_RESTRICTED', eventPayload: { vendor_id: request.vendor_id }
       });
     }
 

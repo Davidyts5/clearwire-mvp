@@ -22,7 +22,7 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
     const { data: wires, error: wError } = await wQuery;
     if (wError) throw wError;
 
-    const wireMap = new Map(wires.map(w => [w.id, w]));
+    const wireMap = new Map<string, any>(wires.map((w: any) => [w.id, w]));
 
     // Fetch approval/denial audit logs
     let lQuery = auth.supabase
@@ -49,7 +49,7 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
       denies: number;
     }> = {};
 
-    logs.forEach(log => {
+    logs.forEach((log: any) => {
       const wire = wireMap.get(log.wire_id);
       if (!wire) return; // Might be outside date range
 

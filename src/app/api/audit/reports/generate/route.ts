@@ -2,8 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
-import { getRiskTrendData } from '@/app/api/audit/analytics/risk-trend/route';
-import { getVendorLeaderboardData } from '@/app/api/audit/analytics/vendor-leaderboard/route';
+import { getRiskTrendData, getVendorLeaderboardData } from '@/lib/analytics-utils';
 import { verifyCompanyChain, canonicalJSON, appendAuditLog } from '@/lib/audit-chain';
 import crypto from 'crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
@@ -95,21 +94,21 @@ export const POST = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params },
 
     const dark = rgb(0.06, 0.09, 0.16);
 
-    function ensureSpace(needed: number) {
+    const ensureSpace = (needed: number) => {
       if (y - needed < MARGIN) {
         page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
         y = PAGE_HEIGHT - MARGIN;
       }
     }
 
-    function heading(text: string) {
+    const heading = (text: string) => {
       ensureSpace(40);
       y -= 10;
       page.drawText(text, { x: MARGIN, y, size: 14, font: bold, color: dark });
       y -= 20;
     }
 
-    function line(text: string, size = 10, isBold = false) {
+    const line = (text: string, size = 10, isBold = false) => {
       const f = isBold ? bold : font;
       const wrapped = wrapText(text, f, size, MAX_WIDTH);
       for (const l of wrapped) {

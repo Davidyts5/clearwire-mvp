@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     if (invite.status !== 'pending') return NextResponse.json({ error: `Invite is already ${invite.status}` }, { status: 400 });
     if (new Date() > new Date(invite.expires_at)) return NextResponse.json({ error: 'Invite link has expired' }, { status: 400 });
 
-    return NextResponse.json({ success: true, data: { email: invite.email, role: invite.role, companyName: invite.companies?.name } });
+    return NextResponse.json({ success: true, data: { email: invite.email, role: invite.role, companyName: (invite.companies as any)?.name } });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Server error parsing token' }, { status: 500 });
   }

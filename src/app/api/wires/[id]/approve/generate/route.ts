@@ -36,7 +36,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
   const options = await generateAuthenticationOptions({
     rpID: getRpId(req),
-    allowCredentials: authenticators.map(a => ({
+    allowCredentials: authenticators.map((a: any) => ({
       id: a.credential_id,
       type: 'public-key',
       transports: a.transports,

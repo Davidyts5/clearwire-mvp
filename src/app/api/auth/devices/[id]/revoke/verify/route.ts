@@ -69,7 +69,7 @@ export const POST = withAuth([...ROLE_VALUES], async (req, { params }, auth) => 
       expectedRPID: getRpId(req),
       credential: {
         id: authenticator.credential_id,
-        publicKey: base64ToUint8Array(authenticator.credential_public_key),
+        publicKey: base64ToUint8Array(authenticator.credential_public_key) as any,
         counter: currentCounter,
         transports: authenticator.transports || [],
       },

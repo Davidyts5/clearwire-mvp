@@ -53,7 +53,7 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
 
     const validationResult = WireSchema.safeParse(payload);
     if (!validationResult.success) {
-      const errorMessage = validationResult.error.issues.map(i => `${i.path[0]}: ${i.message}`).join(', ');
+      const errorMessage = validationResult.error.issues.map(i => `${String(i.path[0])}: ${i.message}`).join(', ');
       return NextResponse.json({ error: `Validation Error - ${errorMessage}` }, { status: 400 });
     }
     

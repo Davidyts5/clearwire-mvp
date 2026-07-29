@@ -32,7 +32,7 @@ export const GET = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, auth
     userID: userIDBytes, 
     userName: `${auth.role}@${auth.companyId}`,
     attestationType: 'none',
-    excludeCredentials: (authenticators || []).map(a => ({
+    excludeCredentials: (authenticators || []).map((a: any) => ({
       id: a.credential_id,
       type: 'public-key',
     })),

@@ -283,7 +283,7 @@ export default function TeamManagement() {
                       <td className="px-6 py-4">
                         <div className="font-medium text-slate-900 flex items-center gap-2">
                           {user.full_name}
-                          {user.can_unfreeze && <AlertTriangle size={14} className="text-red-500" title="Can Unfreeze High-Risk Wires" />}
+                          {user.can_unfreeze && <AlertTriangle size={14} className="text-red-500"  />}
                         </div>
                         <div className="text-xs text-slate-500">{user.email}</div>
                       </td>

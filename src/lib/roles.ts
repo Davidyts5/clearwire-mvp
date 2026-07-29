@@ -18,10 +18,10 @@ export const DashboardRoutes: Record<Role, string> = {
 
 export const Permissions = {
   canCreateWire: (role: Role) => role === ROLES.CLERK,
-  canApproveWire: (role: Role) => [ROLES.CONTROLLER, ROLES.CFO].includes(role),
+  canApproveWire: (role: Role) => [ROLES.CONTROLLER, ROLES.CFO].includes(role as any),
   canManageTeam: (role: Role) => role === ROLES.CFO,
   canManageSettings: (role: Role) => role === ROLES.CFO,
-  canRegisterDevice: (role: Role) => [ROLES.CONTROLLER, ROLES.CFO].includes(role),
+  canRegisterDevice: (role: Role) => [ROLES.CONTROLLER, ROLES.CFO].includes(role as any),
   isReadOnly: (role: Role) => role === ROLES.AUDITOR,
   getPortalRoute: (role: Role) => DashboardRoutes[role] || '/login'
 };

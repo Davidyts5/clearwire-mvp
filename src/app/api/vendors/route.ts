@@ -34,7 +34,7 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
     if (error) throw error;
 
     // Post-process to inject has_pending_bank_change
-    const processedData = data.map(v => {
+    const processedData = data.map((v: any) => {
         let hasPendingBankChange = false;
         if (v.vendor_change_requests) {
             v.vendor_change_requests.forEach((req: any) => {

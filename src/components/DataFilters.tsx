@@ -194,7 +194,7 @@ export default function DataFilters({ data, config, onFilterChange }: DataFilter
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 uppercase ml-2">Quick Filters:</span>
               <button onClick={() => setCfoQuickFilter(cfoQuickFilter === 'frozen' ? '' : 'frozen')} className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-colors ${cfoQuickFilter === 'frozen' ? 'bg-red-100 border-red-200 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>Frozen Payments</button>
-              <button onClick={() => setCfoQuickFilter(cfoQuickFilter === 'high_value' ? '' : 'high_value')} className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-colors ${cfoQuickFilter === 'high_value' ? 'bg-amber-100 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>High Value (>$100k)</button>
+              <button onClick={() => setCfoQuickFilter(cfoQuickFilter === 'high_value' ? '' : 'high_value')} className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-colors ${cfoQuickFilter === 'high_value' ? 'bg-amber-100 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>High Value (&gt;$100k)</button>
               <button onClick={() => setCfoQuickFilter(cfoQuickFilter === 'pending_exec' ? '' : 'pending_exec')} className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-colors ${cfoQuickFilter === 'pending_exec' ? 'bg-blue-100 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>Pending Exec</button>
             </div>
           )}
