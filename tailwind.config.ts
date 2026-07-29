@@ -13,16 +13,17 @@ const config: Config = {
         foreground: "var(--foreground)",
         primary: "#0f172a",
         accent: "#3b82f6",
-        ink: "#1B1A17",
-        panel: "#23221E",
-        parchment: "#EDE8DE",
-        muted: "#A8A296",
-        wax: "#A63A2E",
-        verified: "#4E7A64",
-        brass: "#B08D57"
+        graphite: "#14161A",
+        panel: "#1C1F24",
+        steel: "#E4E7EB",
+        slate: "#8B93A1",
+        line: "#2A2E35",
+        "signal-red": "#B8453A",
+        "signal-green": "#2E7D5B",
+        wire: "#3D7A82"
       },
       fontFamily: {
-        display: ['Fraunces', 'serif'],
+        display: ['"Space Grotesk"', 'sans-serif'],
         body: ['"IBM Plex Sans"', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'monospace'],
       }

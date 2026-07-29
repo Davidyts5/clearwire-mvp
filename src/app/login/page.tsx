@@ -52,49 +52,49 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-ink font-body text-parchment flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-brass/30">
+    <div className="min-h-screen bg-graphite font-body text-steel flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-line/30">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <Stamp size={48} className="mx-auto text-brass mb-4" />
-        <h2 className="mt-2 text-center text-3xl font-bold tracking-tight text-parchment font-display">
+        <Stamp size={48} className="mx-auto text-wire mb-4" />
+        <h2 className="mt-2 text-center text-3xl font-bold tracking-tight text-steel font-display">
           ClearWire Security
         </h2>
-        <p className="mt-2 text-center text-sm text-muted">
+        <p className="mt-2 text-center text-sm text-slate">
           Secure B2B Payment Authorization
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-panel py-8 px-4 sm:px-10 border border-brass/30">
+        <div className="bg-panel py-8 px-4 sm:px-10 border border-line/30">
           <form className="space-y-6" onSubmit={handleLogin}>
             <div>
-              <label className="block text-sm font-semibold text-muted uppercase tracking-wider mb-2 font-mono">Corporate Email</label>
+              <label className="block text-sm font-semibold text-slate uppercase tracking-wider mb-2 font-mono">Corporate Email</label>
               <div className="mt-1">
                 <input
                   required
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full appearance-none rounded-none border border-brass/50 bg-ink px-3 py-2 text-parchment placeholder-muted/50 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass sm:text-sm"
+                  className="block w-full appearance-none rounded-none border border-line/50 bg-graphite px-3 py-2 text-steel placeholder-slate/50 focus:border-line focus:outline-none focus:ring-1 focus:ring-wire sm:text-sm"
                   placeholder="ap@yourcompany.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-muted uppercase tracking-wider mb-2 font-mono">Password</label>
+              <label className="block text-sm font-semibold text-slate uppercase tracking-wider mb-2 font-mono">Password</label>
               <div className="mt-1">
                 <input
                   required
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full appearance-none rounded-none border border-brass/50 bg-ink px-3 py-2 text-parchment placeholder-muted/50 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass sm:text-sm"
+                  className="block w-full appearance-none rounded-none border border-line/50 bg-graphite px-3 py-2 text-steel placeholder-slate/50 focus:border-line focus:outline-none focus:ring-1 focus:ring-wire sm:text-sm"
                 />
               </div>
             </div>
 
             {error && (
-              <div className="text-parchment text-sm font-medium bg-wax p-3 rounded-none border border-wax">
+              <div className="text-steel text-sm font-medium bg-signal-red p-3 rounded-none border border-signal-red">
                 {error}
               </div>
             )}
@@ -103,7 +103,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="flex w-full justify-center rounded-none border border-transparent bg-brass py-2.5 px-4 text-sm font-bold text-ink hover:bg-parchment focus:outline-none disabled:opacity-70 gap-2 items-center transition-colors"
+                className="flex w-full justify-center rounded-none border border-transparent bg-wire py-2.5 px-4 text-sm font-bold text-graphite hover:bg-steel focus:outline-none disabled:opacity-70 gap-2 items-center transition-colors"
               >
                 {isLoading && <Loader2 size={16} className="animate-spin" />}
                 Sign In
@@ -113,8 +113,8 @@ export default function Login() {
         </div>
 
         <div className="mt-8 text-center space-y-2">
-          <p className="text-muted text-sm">
-            Not part of a workspace yet? <Link href="/signup" className="font-bold text-brass hover:text-parchment hover:underline">Create Company</Link>
+          <p className="text-slate text-sm">
+            Not part of a workspace yet? <Link href="/signup" className="font-bold text-wire hover:text-steel hover:underline">Create Company</Link>
           </p>
         </div>
       </div>
