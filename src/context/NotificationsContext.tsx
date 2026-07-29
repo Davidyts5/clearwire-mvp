@@ -61,7 +61,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'notifications',
         filter: `user_id=eq.${userId}`,
-      }, (payload) => {
+      }, (payload: any) => {
         setNotifications(prev => [payload.new as Notification, ...prev]);
         setUnreadCount(c => c + 1);
       })
