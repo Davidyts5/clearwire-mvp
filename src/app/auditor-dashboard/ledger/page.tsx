@@ -1,14 +1,15 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Loader2, FileDigit, Search, Download, ShieldCheck, ShieldAlert, FileText, ChevronRight, CornerDownRight } from "lucide-react";
+import { Loader2, FileDigit, Search, Download, ShieldCheck, ShieldAlert, FileText, ChevronRight, CornerDownRight, Settings, Building2, ListTodo, User } from "lucide-react";
 
 export default function LedgerPage() {
   const [timeline, setTimeline] = useState<any[]>([]);
   const [timelineSearch, setTimelineSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<'ALL' | 'WIRE' | 'VENDOR' | 'SYSTEM' | 'USER'>('ALL');
   const [isLoading, setIsLoading] = useState(true);
   
   // Slide-out Drawer State
-  const [selectedSubject, setSelectedSubject] = useState<{ id: string, type: 'WIRE' | 'VENDOR' | 'SYSTEM' } | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<{ id: string, type: 'WIRE' | 'VENDOR' | 'SYSTEM' | 'USER' } | null>(null);
   const [drawerData, setDrawerData] = useState<any[]>([]);
   const [isDrawerLoading, setIsDrawerLoading] = useState(false);
   const [integrityResults, setIntegrityResults] = useState<Record<string, boolean>>({});
@@ -18,7 +19,7 @@ export default function LedgerPage() {
     const fetchAuditData = async () => {
       try {
         const cacheBuster = new Date().getTime();
-        // Use the proper timeline API endpoint instead of the old master route
+        // Use the proper timeline API endpoint to get all raw audit logs
         const res = await fetch(`/api/audit/timeline?limit=300&t=${cacheBuster}`, { cache: 'no-store' });
         const json = await res.json();
         if (json.success) {
@@ -41,11 +42,11 @@ export default function LedgerPage() {
   }, [timeline, timelineSearch]);
 
   const groupedTimeline = useMemo(() => {
-    const grouped = [];
+    const grouped: any[] = [];
     let currentGroup: any = null;
 
     filteredTimeline.forEach((log) => {
-      // Determine Subject Type and ID
+      // Determine Subject Type and ID based on action and payloads
       let subjectType = 'SYSTEM';
       let subjectId = 'GLOBAL';
       let title = 'System Policy Change';
@@ -56,11 +57,11 @@ export default function LedgerPage() {
         title = `Wire Transfer: ${subjectId.substring(0, 8)}...`;
       } else if (log.action.includes('VENDOR')) {
         subjectType = 'VENDOR';
-        subjectId = log.event_payload?.vendor_id || log.wire_id || 'UNKNOWN';
+        subjectId = log.event_payload?.vendor_id || log.event_payload?.request_id || log.wire_id || 'UNKNOWN';
         title = `Vendor Profile: ${subjectId.substring(0, 8)}...`;
       } else if (log.action.includes('INVITATION') || log.action.includes('DEVICE')) {
         subjectType = 'USER';
-        subjectId = log.event_payload?.email || log.event_payload?.device_name || 'UNKNOWN';
+        subjectId = log.event_payload?.email || log.event_payload?.device_name || log.event_payload?.device_id || 'UNKNOWN';
         title = `User Action: ${subjectId}`;
       }
 
@@ -79,28 +80,37 @@ export default function LedgerPage() {
     });
 
     if (currentGroup) grouped.push(currentGroup);
-    return grouped;
-  }, [filteredTimeline]);
+    
+    // Apply Category Filter
+    if (activeCategory === 'ALL') return grouped;
+    return grouped.filter(g => g.subjectType === activeCategory);
+  }, [filteredTimeline, activeCategory]);
 
-  const openDrawer = async (subjectId: string, type: 'WIRE' | 'VENDOR' | 'SYSTEM') => {
+  const openDrawer = async (subjectId: string, type: 'WIRE' | 'VENDOR' | 'SYSTEM' | 'USER') => {
     setSelectedSubject({ id: subjectId, type });
     setIsDrawerLoading(true);
     setIntegrityResults({});
     try {
-      // If it's a wire, we can fetch the exact forensic timeline
-      if (type === 'WIRE') {
+      // If it's a wire, we can fetch the exact forensic timeline using the specific endpoint
+      if (type === 'WIRE' && subjectId !== 'UNKNOWN') {
         const res = await fetch(`/api/audit/timeline/${subjectId}`);
         const json = await res.json();
-        if (json.success) setDrawerData(json.data);
+        if (json.success) {
+           // We reverse to show chronological top-to-bottom in drawer
+           setDrawerData(json.data.slice().reverse());
+        }
       } else {
-        // Fallback for non-wires: just filter the already-loaded timeline
+        // Fallback for non-wires: just filter the already-loaded global timeline
         const filtered = timeline.filter(l => 
           l.wire_id === subjectId || 
           l.event_payload?.vendor_id === subjectId || 
-          l.event_payload?.request_id === subjectId
+          l.event_payload?.request_id === subjectId ||
+          l.event_payload?.email === subjectId ||
+          l.event_payload?.device_name === subjectId ||
+          l.event_payload?.device_id === subjectId
         );
         // Reverse them so they read chronologically top-to-bottom in the drawer
-        setDrawerData(filtered.reverse());
+        setDrawerData(filtered.slice().reverse());
       }
     } catch (e) {} finally {
       setIsDrawerLoading(false);
@@ -108,7 +118,7 @@ export default function LedgerPage() {
   };
 
   const runIntegrityAudit = async () => {
-    if (selectedSubject?.type !== 'WIRE') return;
+    if (selectedSubject?.type !== 'WIRE' || selectedSubject.id === 'UNKNOWN') return;
     setIsVerifying(true);
     try {
       const res = await fetch(`/api/audit/timeline/${selectedSubject.id}/verify`, { method: 'POST' });
@@ -124,7 +134,7 @@ export default function LedgerPage() {
   const getActionColor = (action: string) => {
     if (action.includes('APPROVED') || action === 'CREATED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
     if (action.includes('REJECTED') || action.includes('DENIED') || action.includes('FROZEN') || action.includes('RESTRICTED')) return 'bg-red-100 text-red-700 border-red-200';
-    if (action.includes('ESCALATED') || action.includes('REQUESTED') || action.includes('CHANGED')) return 'bg-amber-100 text-amber-700 border-amber-200';
+    if (action.includes('ESCALATED') || action.includes('REQUESTED') || action.includes('CHANGED') || action.includes('REVOKED')) return 'bg-amber-100 text-amber-700 border-amber-200';
     return 'bg-slate-100 text-slate-700 border-slate-200';
   };
 
@@ -138,7 +148,7 @@ export default function LedgerPage() {
             <FileDigit size={16} /> Auditor Dashboard
           </div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Master Ledger</h1>
-          <p className="text-slate-500 mt-1">Grouped chronological record of all immutable workspace events.</p>
+          <p className="text-slate-500 mt-1">Categorized chronological record of all immutable workspace events.</p>
         </div>
         <a href="/api/audit/export-csv" className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-colors">
           <Download size={18} /> Export Full CSV
@@ -147,19 +157,35 @@ export default function LedgerPage() {
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[75vh]">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 flex-wrap gap-3">
-          <div className="flex items-center gap-2">
-            <FileDigit size={18} className="text-blue-500"/>
-            <h2 className="font-bold text-slate-900">Live Immutable Audit Stream</h2>
+          
+          {/* Tab Switcher */}
+          <div className="flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg shadow-sm overflow-x-auto max-w-full">
+             <button onClick={() => setActiveCategory('ALL')} className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === 'ALL' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}>
+               All Events
+             </button>
+             <button onClick={() => setActiveCategory('WIRE')} className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-colors ${activeCategory === 'WIRE' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}>
+               <ListTodo size={14}/> Wires
+             </button>
+             <button onClick={() => setActiveCategory('VENDOR')} className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-colors ${activeCategory === 'VENDOR' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}>
+               <Building2 size={14}/> Vendors
+             </button>
+             <button onClick={() => setActiveCategory('SYSTEM')} className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-colors ${activeCategory === 'SYSTEM' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}>
+               <Settings size={14}/> Policies
+             </button>
+             <button onClick={() => setActiveCategory('USER')} className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-colors ${activeCategory === 'USER' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}>
+               <User size={14}/> Users
+             </button>
           </div>
-          <div className="relative w-full sm:w-64">
+
+          <div className="relative w-full sm:w-64 ml-auto">
             <Search className="absolute left-3 top-2 text-slate-400" size={16} />
-            <input type="text" placeholder="Search hash, action, or ID..." value={timelineSearch} onChange={e => setTimelineSearch(e.target.value)} className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            <input type="text" placeholder="Search payload, action, or ID..." value={timelineSearch} onChange={e => setTimelineSearch(e.target.value)} className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
           </div>
         </div>
         
         <div className="overflow-y-auto flex-1 bg-slate-50 p-4 space-y-4">
           {groupedTimeline.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">No events match search.</div>
+            <div className="p-8 text-center text-slate-500">No events match filter.</div>
           ) : (
             groupedTimeline.map((group: any, idx: number) => (
               <div key={idx} onClick={() => openDrawer(group.subjectId, group.subjectType)} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group">
@@ -215,7 +241,7 @@ export default function LedgerPage() {
               </button>
             </div>
 
-            {selectedSubject.type === 'WIRE' && drawerData.length > 0 && (
+            {selectedSubject.type === 'WIRE' && drawerData.length > 0 && selectedSubject.id !== 'UNKNOWN' && (
               <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center shrink-0">
                 <p className="text-xs text-slate-500 font-medium">Verify cryptographic integrity across all actions in this trace.</p>
                 <button onClick={runIntegrityAudit} disabled={isVerifying} className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm flex items-center gap-2 transition-colors shrink-0">
@@ -228,9 +254,11 @@ export default function LedgerPage() {
             <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
               {isDrawerLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-600" size={32} /></div>
+              ) : drawerData.length === 0 ? (
+                <div className="flex justify-center py-20 text-slate-500 text-sm">No historical data available.</div>
               ) : (
                 <div className="space-y-6">
-                  {drawerData.map((log: any, idx: number) => {
+                  {drawerData.map((log: any) => {
                     const isVerified = integrityResults[log.id];
                     const hasRunVerification = Object.keys(integrityResults).length > 0;
                     
