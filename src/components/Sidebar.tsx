@@ -24,21 +24,16 @@ export default function Sidebar() {
 
     const fetchRole = async () => {
       try {
-        // Protect against Supabase client locks deadlocking the UI
-        const res: any = await Promise.race([
-          supabase.auth.getSession(),
-          new Promise(resolve => setTimeout(() => resolve({ error: new Error('Timeout') }), 3000))
-        ]);
-        
-        if (res.error) throw res.error;
-        const session = res.data?.session;
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
 
         if (session) {
-          const { data } = await supabase.from('users').select('role').eq('id', session.user.id).single();
+          const { data, error: userError } = await supabase.from('users').select('role').eq('id', session.user.id).single();
+          if (userError) throw userError;
           if (data) setRole(data.role as Role);
         }
       } catch (err) {
-        console.error(err);
+        console.error("Sidebar role fetch error:", err);
       } finally {
         setIsLoading(false);
       }

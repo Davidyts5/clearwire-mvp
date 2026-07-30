@@ -19,12 +19,7 @@ export default function SessionManager({ collapsed = false, showBadge = true }: 
     setIsLoggingOut(true);
     try {
       const supabase = createClient();
-      
-      // Force timeout so UI never hangs if Supabase lock is deadlocked
-      await Promise.race([
-        supabase.auth.signOut(),
-        new Promise(resolve => setTimeout(resolve, 2000))
-      ]);
+      await supabase.auth.signOut();
       
       const domains = [window.location.hostname, `.${window.location.hostname}`];
       domains.forEach(domain => {
