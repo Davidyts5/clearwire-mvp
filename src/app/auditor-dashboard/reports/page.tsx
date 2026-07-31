@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { FileText, Loader2, ShieldCheck, ShieldAlert, Fingerprint, Activity, Server, ArrowRight, Lock } from "lucide-react";
+import { FileText, Loader2, ShieldCheck, ShieldAlert, Fingerprint, Activity, Server, ArrowRight, Lock, Download } from "lucide-react";
 
 export default function ReportsPage() {
   const [reportStart, setReportStart] = useState('');

@@ -25,7 +25,7 @@ export default function Error({
             Try Again
           </button>
           <a
-            href="/"
+            href="/dashboard"
             style={{ padding: '10px 20px', background: 'white', color: '#334155', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 600, fontSize: 14, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
           >
             Back to Dashboard
