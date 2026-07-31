@@ -116,7 +116,7 @@ export default function Sidebar() {
           <div className="relative flex-1 flex flex-col max-w-xs w-full bg-slate-900 h-full border-r border-slate-800 animate-in slide-in-from-left">
             <NavList isMobile={true} />
             <div className="p-4 border-t border-slate-800 bg-slate-900/50 mt-auto">
-              <SessionManager collapsed={false} />
+              <SessionManager collapsed={false} showBadge={false} />
             </div>
           </div>
         </div>
@@ -124,15 +124,20 @@ export default function Sidebar() {
 
       {/* Desktop Sidebar (Collapsible) */}
       <div className="hidden md:flex flex-col h-screen shrink-0 bg-slate-900 text-slate-300 border-r border-slate-800 transition-all duration-300 w-20 lg:w-64 hover:w-64 group sticky top-0 z-40">
-        <div className="p-6 flex items-center gap-2 font-bold text-xl tracking-tight text-white border-b border-slate-800 overflow-hidden h-[73px] shrink-0 justify-center lg:justify-start group-hover:justify-start">
-          <ShieldCheck className="text-blue-400 shrink-0" size={28} />
-          <span className="hidden lg:block group-hover:block whitespace-nowrap">ClearWire</span>
+        <div className="p-6 flex items-center justify-between border-b border-slate-800 overflow-hidden h-[73px] shrink-0 w-full group-hover:w-full lg:w-full">
+          <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-white shrink-0 mx-auto lg:mx-0 group-hover:mx-0 transition-all">
+            <ShieldCheck className="text-blue-400 shrink-0" size={28} />
+            <span className="hidden lg:block group-hover:block whitespace-nowrap">ClearWire</span>
+          </div>
+          <div className="hidden lg:block group-hover:block ml-auto">
+            <NotificationCenter />
+          </div>
         </div>
         
         <NavList />
         
         <div className="p-4 border-t border-slate-800 overflow-hidden shrink-0 flex flex-col items-center lg:items-start group-hover:items-start w-full">
-          <SessionManager collapsed={true} />
+          <SessionManager collapsed={true} showBadge={false} />
         </div>
       </div>
     </>
