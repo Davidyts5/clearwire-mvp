@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Bell, Check, ShieldCheck, Mail, Activity, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useNotifications } from "@/context/NotificationsContext";
@@ -8,17 +9,36 @@ import { useNotifications } from "@/context/NotificationsContext";
 export default function NotificationCenter() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current && 
+        !dropdownRef.current.contains(event.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      // Calculate position relative to viewport, subtracting dropdown width (approx 384px for w-96)
+      setDropdownPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right
+      });
+    }
+  }, [isOpen]);
+
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -38,8 +58,9 @@ export default function NotificationCenter() {
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative">
       <button
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
       >
@@ -49,8 +70,12 @@ export default function NotificationCenter() {
         )}
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+      {isOpen && typeof window !== 'undefined' && createPortal(
+        <div 
+          ref={dropdownRef}
+          style={{ top: dropdownPos.top, right: dropdownPos.right }}
+          className="fixed w-[90vw] max-w-sm sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2"
+        >
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <h3 className="font-bold text-slate-900 flex items-center gap-2">
               Notifications
@@ -110,7 +135,8 @@ export default function NotificationCenter() {
               </ul>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
