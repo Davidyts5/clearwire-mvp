@@ -9,7 +9,7 @@ import { useNotifications } from "@/context/NotificationsContext";
 export default function NotificationCenter() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+  const [dropdownPos, setDropdownPos] = useState<{ top: number, right: number | string, left: number | string }>({ top: 0, right: 0, left: "auto" });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -31,11 +31,17 @@ export default function NotificationCenter() {
   useEffect(() => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      // Calculate position relative to viewport, subtracting dropdown width (approx 384px for w-96)
-      setDropdownPos({
-        top: rect.bottom + 8,
-        right: window.innerWidth - rect.right
-      });
+      const panelWidth = window.innerWidth < 640 ? 320 : 384;
+      const spaceOnRight = window.innerWidth - rect.left;
+      
+      if (spaceOnRight >= panelWidth + 16) {
+        // enough room to extend rightward from the button's left edge
+        setDropdownPos({ top: rect.bottom + 8, left: rect.left, right: 'auto' });
+      } else {
+        // not enough room on the right, fall back to the existing 
+        // right-anchored behavior (extend leftward)
+        setDropdownPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right, left: 'auto' });
+      }
     }
   }, [isOpen]);
 
@@ -73,7 +79,7 @@ export default function NotificationCenter() {
       {isOpen && typeof window !== 'undefined' && createPortal(
         <div 
           ref={dropdownRef}
-          style={{ top: dropdownPos.top, right: dropdownPos.right }}
+          style={{ top: dropdownPos.top, right: dropdownPos.right, left: dropdownPos.left }}
           className="fixed w-[90vw] max-w-sm sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2"
         >
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
