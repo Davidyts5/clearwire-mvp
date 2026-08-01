@@ -75,14 +75,14 @@ export default function Sidebar() {
             <Link 
               key={item.href} 
               href={item.href} 
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center lg:justify-start group-hover:justify-start justify-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive 
                   ? "bg-slate-800 text-white shadow-sm" 
                   : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/50"
-              } ${!isMobile ? "lg:w-full group-hover:w-full w-fit mx-auto lg:mx-0 group-hover:mx-0" : ""}`}
+              } ${!isMobile ? "w-full" : ""}`}
             >
               <Icon size={20} className={`shrink-0 ${isActive ? "text-blue-400" : "text-slate-400"}`} /> 
-              <span className={`${!isMobile ? "hidden lg:block group-hover:block whitespace-nowrap" : "block"}`}>{item.label}</span>
+              <span className={`${!isMobile ? "hidden lg:block group-hover:block whitespace-nowrap overflow-hidden text-ellipsis" : "block"}`}>{item.label}</span>
             </Link>
           );
         })
@@ -124,12 +124,12 @@ export default function Sidebar() {
 
       {/* Desktop Sidebar (Collapsible) */}
       <div className="hidden md:flex flex-col h-screen shrink-0 bg-slate-900 text-slate-300 border-r border-slate-800 transition-all duration-300 w-20 lg:w-64 hover:w-64 group sticky top-0 z-40">
-        <div className="p-6 flex items-center justify-between border-b border-slate-800 overflow-hidden h-[73px] shrink-0 w-full group-hover:w-full lg:w-full">
+        <div className="p-4 lg:p-6 flex items-center justify-between border-b border-slate-800 overflow-hidden h-[73px] shrink-0 w-full group-hover:w-full lg:w-full">
           <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-white shrink-0 mx-auto lg:mx-0 group-hover:mx-0 transition-all">
             <ShieldCheck className="text-blue-400 shrink-0" size={28} />
             <span className="hidden lg:block group-hover:block whitespace-nowrap">ClearWire</span>
           </div>
-          <div className="hidden lg:block group-hover:block ml-auto">
+          <div className="hidden lg:block group-hover:block ml-auto shrink-0">
             <NotificationCenter />
           </div>
         </div>
