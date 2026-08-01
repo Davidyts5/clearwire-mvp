@@ -93,7 +93,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile Header & Toggle */}
-      <div className="md:hidden flex items-center justify-between bg-slate-900 p-4 sticky top-0 z-50 border-b border-slate-800">
+      <div className="md:hidden flex items-center justify-between bg-slate-900 p-4 h-[73px] sticky top-0 z-50 border-b border-slate-800">
         <div className="flex items-center gap-2 font-bold text-lg text-white">
           <ShieldCheck className="text-blue-400" size={24} />
           ClearWire
@@ -111,8 +111,8 @@ export default function Sidebar() {
 
       {/* Mobile Drawer */}
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40 flex">
-          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
+        <div className="md:hidden fixed top-[73px] inset-x-0 bottom-0 z-40 flex">
+          <div className="fixed top-[73px] inset-x-0 bottom-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
           <div className="relative flex-1 flex flex-col max-w-xs w-full bg-slate-900 h-full border-r border-slate-800 animate-in slide-in-from-left">
             <NavList isMobile={true} />
             <div className="p-4 border-t border-slate-800 bg-slate-900/50 mt-auto">
