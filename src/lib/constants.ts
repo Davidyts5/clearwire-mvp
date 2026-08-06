@@ -25,17 +25,4 @@ export const COUNTRIES = [
 
 export const CURRENCIES = [
   { code: 'USD', name: 'US Dollar' },
-  { code: 'EUR', name: 'Euro' },
-  { code: 'GBP', name: 'British Pound' },
-  { code: 'CAD', name: 'Canadian Dollar' },
-  { code: 'AUD', name: 'Australian Dollar' },
-  { code: 'JPY', name: 'Japanese Yen' },
-  { code: 'SGD', name: 'Singapore Dollar' },
-  { code: 'CHF', name: 'Swiss Franc' },
-  { code: 'MXN', name: 'Mexican Peso' },
-  { code: 'INR', name: 'Indian Rupee' },
-  { code: 'BRL', name: 'Brazilian Real' },
-  { code: 'ZAR', name: 'South African Rand' },
-  { code: 'KES', name: 'Kenyan Shilling' },
-  { code: 'AED', name: 'UAE Dirham' }
 ];
