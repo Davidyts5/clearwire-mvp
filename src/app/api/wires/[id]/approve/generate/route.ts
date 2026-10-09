@@ -8,7 +8,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   // RATE LIMITING FIX: Prevent attackers from spamming challenge generation
-  const isAllowed = checkRateLimit(`webauthn_gen_${auth.userId}`, 10, 60000);
+  const isAllowed = await checkRateLimit(`webauthn_gen_${auth.userId}`, 10, 60000);
   if (!isAllowed) {
     return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
   }
