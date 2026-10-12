@@ -26,7 +26,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </main>
             <footer className="border-t border-[#dfe1d7] bg-[#f7f6f0] px-4 py-5 sm:px-6">
               <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs leading-5 text-[#59665d]">ClearWire · Payment-request review demo</p>
+                <p className="text-xs leading-5 text-[#59665d]">© 2026 ClearWire Security</p>
                 <LegalLinks />
               </div>
             </footer>
