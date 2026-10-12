@@ -3,12 +3,13 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import { NotificationsProvider } from "@/context/NotificationsContext";
+import CookieNotice from "@/components/CookieNotice";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ClearWire | B2B Anti-Fraud Payments",
-  description: "Cryptographic out-of-band payment authorization.",
+  title: "ClearWire | Payment request review",
+  description: "Payment-request review, passkey approvals, and decision history for business finance teams.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode; }>) {
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </div>
           </NotificationsProvider>
         </div>
+        <CookieNotice />
       </body>
     </html>
   );

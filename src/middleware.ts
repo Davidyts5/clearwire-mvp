@@ -4,8 +4,14 @@ import { DashboardRoutes, Role } from './lib/roles'
 import { NAVIGATION_CONFIG } from './config/navigation'
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request: { headers: request.headers } })
-  const STRICT_EXPIRATION_SECONDS = 3600; 
+  const path = request.nextUrl.pathname;
+  const isPolicyRoute = path === '/privacy' || path.startsWith('/privacy/') || path === '/terms' || path === '/cookies' || path === '/third-party-notices';
+  if (path === '/' || isPolicyRoute) {
+    return NextResponse.next({ request: { headers: request.headers } });
+  }
+
+  let response = NextResponse.next({ request: { headers: request.headers } });
+  const STRICT_EXPIRATION_SECONDS = 3600;
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,9 +39,6 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { session } } = await supabase.auth.getSession()
-
-  const path = request.nextUrl.pathname;
-  if (path === '/') return response;
 
   const isAuthRoute = path.startsWith('/login') || path.startsWith('/signup');
   const isInviteRoute = path.startsWith('/invite');

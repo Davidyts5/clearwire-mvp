@@ -3,16 +3,20 @@ import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/api-auth';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { appendAuditLog } from '@/lib/audit-chain';
+import { TERMS_VERSION, PRIVACY_NOTICE_VERSION } from '@/lib/legal';
 
 const OnboardSchema = z.object({
   companyName: z.string().min(2, "Company Name must be at least 2 characters").max(100),
   fullName: z.string().min(2, "Full Name is required").max(100),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(12, "Password must be at least 12 characters for enterprise security")
+  password: z.string().min(12, "Password must be at least 12 characters"),
+  termsAccepted: z.boolean().refine(value => value, { message: 'Agree to the Terms of Use and acknowledge the Privacy Notice to continue.' })
 });
 
 export async function POST(req: Request) {
   let authUserId: string | null = null;
+  let provisionedCompanyId: string | null = null;
   const adminClient = await getAdminClient();
 
   try {
@@ -32,7 +36,7 @@ export async function POST(req: Request) {
     }
 
     if (!authData.user) {
-      return NextResponse.json({ error: "Failed to create secure credentials." }, { status: 500 });
+      return NextResponse.json({ error: "Failed to create credentials." }, { status: 500 });
     }
 
     authUserId = authData.user.id;
@@ -49,6 +53,25 @@ export async function POST(req: Request) {
       throw new Error(rpcError.message);
     }
 
+    provisionedCompanyId = rpcData?.company_id || null;
+    if (!provisionedCompanyId || !authUserId) throw new Error('Tenant provisioning returned incomplete identity data.');
+
+    await appendAuditLog(adminClient, {
+      companyId: provisionedCompanyId,
+      wireId: null,
+      actorId: authUserId,
+      action: 'TENANT_WORKSPACE_CREATED',
+      eventPayload: {
+        company_name: parsed.companyName,
+        company_slug: rpcData.slug,
+        legal_acceptance: {
+          terms_version: TERMS_VERSION,
+          privacy_notice_version: PRIVACY_NOTICE_VERSION,
+          accepted_at: new Date().toISOString(),
+        },
+      },
+    });
+
     // 3. Determine if email confirmation is required by checking the session
     // If the user is returned but the session is null, Supabase requires email verification.
     const requiresEmailVerification = authData.session === null;
@@ -60,15 +83,19 @@ export async function POST(req: Request) {
     });
 
   } catch (error: any) {
-    // FATAL ERROR ROLLBACK
-    // If the database transaction failed, we must destroy the orphaned Auth record immediately.
-    if (authUserId) {
+    // Only remove the newly created Auth identity if tenant provisioning never completed.
+    // Once a workspace exists, keep its owner identity intact even if audit append fails.
+    if (authUserId && !provisionedCompanyId) {
       console.error(`[FATAL] Provisioning failed. Rolling back user: ${authUserId}`);
-      await adminClient.auth.admin.deleteUser(authUserId).catch(e => console.error("Rollback failed:", e));
+      await adminClient.auth.admin.deleteUser(authUserId).catch(e => console.error('Rollback failed:', e));
+    } else if (provisionedCompanyId) {
+      console.error(`[FATAL] Workspace ${provisionedCompanyId} was created but its audit event could not be confirmed.`);
     }
 
-    return NextResponse.json({ 
-      error: error.errors ? error.errors[0].message : (error.message || 'An unexpected error occurred during onboarding.') 
-    }, { status: 400 });
+    return NextResponse.json({
+      error: provisionedCompanyId
+        ? 'Workspace setup completed, but audit logging failed. Contact your workspace administrator before retrying.'
+        : (error.errors ? error.errors[0].message : (error.message || 'An unexpected error occurred during onboarding.')),
+    }, { status: provisionedCompanyId ? 500 : 400 });
   }
 }

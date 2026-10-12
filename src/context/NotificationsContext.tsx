@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
 type Notification = {
@@ -30,6 +31,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const hasSubscribed = useRef(false);
+  const pathname = usePathname();
+  const isPublicRoute = pathname === '/' || pathname === '/login' || pathname === '/signup' || pathname.startsWith('/invite') || pathname === '/terms' || pathname === '/cookies' || pathname === '/third-party-notices' || pathname.startsWith('/privacy');
 
   const fetchNotifications = async () => {
     try {
@@ -43,6 +46,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    if (isPublicRoute) {
+      setUserId(null);
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+
     const init = async () => {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
@@ -50,7 +60,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       await fetchNotifications();
     };
     init();
-  }, []);
+  }, [isPublicRoute]);
 
   useEffect(() => {
     if (!userId || hasSubscribed.current) return;

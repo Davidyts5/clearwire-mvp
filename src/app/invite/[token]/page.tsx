@@ -14,6 +14,7 @@ export default function InviteRegistration({ params }: { params: { token: string
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -50,7 +51,7 @@ export default function InviteRegistration({ params }: { params: { token: string
       const res = await fetch(`/api/team/invites/${params.token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName, password })
+        body: JSON.stringify({ fullName, password, termsAccepted })
       });
       const json = await res.json();
       
@@ -137,6 +138,14 @@ export default function InviteRegistration({ params }: { params: { token: string
               <div className="mt-1">
                 <input required type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" minLength={8} className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm" />
               </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <input id="invite-terms-accepted" type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} required className="mt-1 h-4 w-4 rounded border-slate-400 accent-[#315741] focus:ring-[#315741]" />
+                <label htmlFor="invite-terms-accepted" className="text-sm leading-6 text-slate-700">I agree to the Terms of Use and acknowledge the Privacy Notice.</label>
+              </div>
+              <p className="pl-7 text-xs leading-5 text-slate-600">Read the <Link href="/terms" className="font-semibold underline underline-offset-4">Terms of Use</Link> and <Link href="/privacy" className="font-semibold underline underline-offset-4">Privacy Notice</Link> before accepting.</p>
             </div>
 
             <div>

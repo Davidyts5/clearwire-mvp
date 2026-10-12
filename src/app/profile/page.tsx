@@ -5,6 +5,7 @@ import { User, Fingerprint, ShieldAlert, ShieldCheck, Loader2, AlertTriangle, Mo
 import { createClient } from "@/lib/supabase";
 import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 import { Permissions } from "@/lib/roles";
+import Link from "next/link";
 import { getDeviceMetadata } from "@/lib/device-utils";
 
 export default function ProfilePage() {
@@ -23,6 +24,9 @@ export default function ProfilePage() {
   const [isRevoking, setIsRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [emailPreferenceMessage, setEmailPreferenceMessage] = useState<string | null>(null);
+  const [emailPreferenceError, setEmailPreferenceError] = useState<string | null>(null);
+  const [isUpdatingEmailPreference, setIsUpdatingEmailPreference] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -179,6 +183,27 @@ export default function ProfilePage() {
     }
   };
 
+  const updateEmailPreference = async (enabled: boolean) => {
+    setIsUpdatingEmailPreference(true);
+    setEmailPreferenceError(null);
+    setEmailPreferenceMessage(null);
+    try {
+      const response = await fetch('/api/profile/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email_notifications_enabled: enabled }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Could not save email preferences.');
+      setUser((previous: any) => ({ ...previous, email_notifications_enabled: enabled }));
+      setEmailPreferenceMessage(enabled ? 'Operational email notifications are on.' : 'Operational email notifications are off.');
+    } catch (preferenceError: any) {
+      setEmailPreferenceError(preferenceError.message || 'Could not save email preferences. Please try again.');
+    } finally {
+      setIsUpdatingEmailPreference(false);
+    }
+  };
+
   if (isLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
   return (
@@ -311,14 +336,20 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      <section aria-labelledby="profile-data-requests" className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <h2 id="profile-data-requests" className="text-lg font-bold text-slate-900">Privacy and account data</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Review the data notices or record an account-deletion request. A request is logged for follow-up; it does not automatically delete workspace or audit data.</p>
+        <Link href="/privacy/data-request" className="mt-4 inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 underline decoration-slate-400 underline-offset-4 hover:bg-slate-50">Privacy details and data request</Link>
+      </section>
+
       {/* Notification Preferences Card */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div id="notification-preferences" className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <div>
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <Mail className="text-blue-500" size={20} /> Notification Preferences
             </h2>
-            <p className="text-sm text-slate-500">Control whether you receive email notifications in addition to in-app alerts.</p>
+            <p className="text-sm text-slate-500">Control non-marketing email notifications in addition to in-app alerts.</p>
           </div>
         </div>
         <div className="p-6">
@@ -326,21 +357,14 @@ export default function ProfilePage() {
             <input
               type="checkbox"
               checked={user?.email_notifications_enabled ?? true}
-              onChange={async (e) => {
-                const newValue = e.target.checked;
-                setUser((prev: any) => ({ ...prev, email_notifications_enabled: newValue }));
-                try {
-                  await fetch('/api/profile/notifications', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email_notifications_enabled: newValue }),
-                  });
-                } catch (err) {}
-              }}
-              className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              disabled={isUpdatingEmailPreference}
+              onChange={(event) => updateEmailPreference(event.target.checked)}
+              className="h-5 w-5 rounded border-slate-300 text-blue-700 focus:ring-blue-700 disabled:cursor-wait"
             />
-            <span className="text-sm font-medium text-slate-700">Email me for wire approvals, vendor alerts, and invitations</span>
+            <span className="text-sm font-medium text-slate-700">Email me operational updates about approvals, vendor alerts, and invitations</span>
           </label>
+          {emailPreferenceMessage && <p role="status" aria-live="polite" className="mt-3 text-sm font-medium text-emerald-800">{emailPreferenceMessage}</p>}
+          {emailPreferenceError && <p role="alert" className="mt-3 text-sm font-medium text-red-800">{emailPreferenceError}</p>}
         </div>
       </div>
 

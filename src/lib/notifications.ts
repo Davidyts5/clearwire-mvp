@@ -58,6 +58,37 @@ export async function createNotification(supabase: any, params: {
   relatedInviteId?: string;
 }) {
   try {
+    const { data: recipient, error: recipientError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', params.userId)
+      .eq('company_id', params.companyId)
+      .maybeSingle();
+    if (recipientError) throw recipientError;
+    if (!recipient) {
+      console.error('Refusing to notify a user outside the supplied company.');
+      return;
+    }
+
+    for (const [table, resourceId] of [
+      ['wire_requests', params.relatedWireId],
+      ['vendors', params.relatedVendorId],
+      ['team_invites', params.relatedInviteId],
+    ] as const) {
+      if (!resourceId) continue;
+      const { data: resource, error: resourceError } = await supabase
+        .from(table)
+        .select('id')
+        .eq('id', resourceId)
+        .eq('company_id', params.companyId)
+        .maybeSingle();
+      if (resourceError) throw resourceError;
+      if (!resource) {
+        console.error(`Refusing notification with a cross-company ${table} reference.`);
+        return;
+      }
+    }
+
     const { error } = await supabase.from('notifications').insert([{
       company_id: params.companyId,
       user_id: params.userId,
@@ -82,13 +113,19 @@ export async function createNotification(supabase: any, params: {
 }
 
 
-async function dispatchEmail(supabase: any, params: { userId: string; title: string; message: string; actionUrl?: string }) {
-  const { data: user } = await supabase.from('users').select('email, email_notifications_enabled').eq('id', params.userId).single();
+async function dispatchEmail(supabase: any, params: { companyId: string; userId: string; title: string; message: string; actionUrl?: string }) {
+  const { data: user } = await supabase
+    .from('users')
+    .select('email, email_notifications_enabled')
+    .eq('id', params.userId)
+    .eq('company_id', params.companyId)
+    .maybeSingle();
   if (!user?.email || user.email_notifications_enabled === false) return;
   await sendNotificationEmail({
     to: user.email,
     title: params.title,
     message: params.message,
     actionUrl: params.actionUrl,
+    preferencesUrl: '/profile#notification-preferences',
   });
 }
