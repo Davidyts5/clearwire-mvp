@@ -4,6 +4,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import { NotificationsProvider } from "@/context/NotificationsContext";
 import CookieNotice from "@/components/CookieNotice";
+import LegalLinks from "@/components/LegalLinks";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,6 +24,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <main className="flex-1 overflow-y-auto">
               {children}
             </main>
+            <footer className="border-t border-[#dfe1d7] bg-[#f7f6f0] px-4 py-5 sm:px-6">
+              <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs leading-5 text-[#59665d]">ClearWire · Payment-request review demo</p>
+                <LegalLinks />
+              </div>
+            </footer>
           </div>
           </NotificationsProvider>
         </div>
