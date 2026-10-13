@@ -387,24 +387,44 @@ BEGIN
     $policy$;
   END IF;
 
-  IF to_regclass('storage.objects') IS NOT NULL
-    AND NOT EXISTS (
+  IF to_regclass('storage.objects') IS NOT NULL THEN
+    IF NOT EXISTS (
       SELECT 1 FROM pg_policies
       WHERE schemaname = 'storage'
         AND tablename = 'objects'
         AND policyname = 'Inbound quarantine restricts invoice reads'
     ) THEN
-    EXECUTE $policy$
-      CREATE POLICY "Inbound quarantine restricts invoice reads"
-      ON storage.objects
-      AS RESTRICTIVE
-      FOR SELECT
-      TO authenticated
-      USING (
-        bucket_id <> 'invoices'
-        OR NOT public.is_wire_invoice_quarantined(name)
-      )
-    $policy$;
+      EXECUTE $policy$
+        CREATE POLICY "Inbound quarantine restricts invoice reads"
+        ON storage.objects
+        AS RESTRICTIVE
+        FOR SELECT
+        TO authenticated
+        USING (
+          bucket_id <> 'invoices'
+          OR NOT public.is_wire_invoice_quarantined(name)
+        )
+      $policy$;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies
+      WHERE schemaname = 'storage'
+        AND tablename = 'objects'
+        AND policyname = 'God Mode invoice archive is server-only'
+    ) THEN
+      EXECUTE $policy$
+        CREATE POLICY "God Mode invoice archive is server-only"
+        ON storage.objects
+        AS RESTRICTIVE
+        FOR SELECT
+        TO authenticated
+        USING (
+          bucket_id <> 'invoices'
+          OR (storage.foldername(name))[1] <> 'god-mode-archive'
+        )
+      $policy$;
+    END IF;
   END IF;
 END;
 $$;

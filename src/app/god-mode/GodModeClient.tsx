@@ -69,8 +69,73 @@ function MetricCard({
 
 export default function GodModeClient({ telemetry, companies, migrationPending }: GodModeClientProps) {
   const [ghostMode, setGhostMode] = useState(false);
+  const [invoiceWireId, setInvoiceWireId] = useState('');
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [replacementBusy, setReplacementBusy] = useState(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [invoiceStatus, setInvoiceStatus] = useState<string | null>(null);
   const toggleGhostMode = () => setGhostMode((current) => !current);
   const formattedVolume = formatUsd(telemetry.totalWireVolumeUsd);
+
+  const invoiceEndpoint = () => `/api/god-mode/wires/${encodeURIComponent(invoiceWireId.trim())}/invoice`;
+
+  const inspectInvoice = async () => {
+    if (!invoiceWireId.trim()) {
+      setInvoiceError('Enter a wire ID first.');
+      return;
+    }
+
+    setInvoiceBusy(true);
+    setInvoiceError(null);
+    setInvoiceStatus(null);
+    setInvoiceUrl(null);
+    try {
+      const response = await fetch(invoiceEndpoint(), { method: 'GET', cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok || !result.success || !result.data?.signedUrl) {
+        throw new Error(result.error || 'Invoice inspection failed.');
+      }
+      setInvoiceUrl(result.data.signedUrl);
+      setInvoiceStatus(`Secure preview link expires in ${result.data.expiresInSeconds ?? 60} seconds.`);
+    } catch (error) {
+      setInvoiceError(error instanceof Error ? error.message : 'Invoice inspection failed.');
+    } finally {
+      setInvoiceBusy(false);
+    }
+  };
+
+  const replaceInvoice = async () => {
+    if (!invoiceWireId.trim()) {
+      setInvoiceError('Enter a wire ID first.');
+      return;
+    }
+    if (!invoiceFile) {
+      setInvoiceError('Choose a replacement invoice file first.');
+      return;
+    }
+
+    setReplacementBusy(true);
+    setInvoiceError(null);
+    setInvoiceStatus(null);
+    try {
+      const body = new FormData();
+      body.append('invoice', invoiceFile);
+      const response = await fetch(invoiceEndpoint(), { method: 'POST', body });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Invoice replacement failed.');
+      }
+      setInvoiceFile(null);
+      setInvoiceUrl(null);
+      setInvoiceStatus(result.message || 'Invoice replaced and recorded in the WORM audit chain. Use Inspect Invoice to refresh the preview.');
+    } catch (error) {
+      setInvoiceError(error instanceof Error ? error.message : 'Invoice replacement failed.');
+    } finally {
+      setReplacementBusy(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[200] overflow-y-auto bg-[#0a0a0a] text-emerald-500 selection:bg-emerald-500/30 selection:text-emerald-100">
@@ -145,6 +210,89 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                 </p>
               </div>
             </div>
+          </section>
+
+          <section className="space-y-4 rounded-xl border border-emerald-500/20 bg-[#101410] p-4 sm:p-5" aria-labelledby="invoice-inspection-title">
+            <div>
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Eye size={16} aria-hidden="true" />
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/60">Quarantine support</p>
+              </div>
+              <h2 id="invoice-inspection-title" className="mt-2 text-lg font-semibold text-emerald-100">Invoice Inspection &amp; Replacement</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-emerald-100/70">
+                Inspect an invoice by wire ID or replace the stored file without changing the wire&apos;s invoice path. Replacement attempts and completion are WORM-logged, and the prior file is retained in restricted support storage.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-500/65">Wire ID</span>
+                <input
+                  value={invoiceWireId}
+                  onChange={(event) => {
+                    setInvoiceWireId(event.target.value);
+                    setInvoiceFile(null);
+                    setInvoiceUrl(null);
+                    setInvoiceError(null);
+                    setInvoiceStatus(null);
+                  }}
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder="Enter the quarantined wire UUID"
+                  className="w-full rounded-lg border border-emerald-500/20 bg-black/40 px-3 py-2.5 font-mono text-sm text-emerald-100 placeholder:text-emerald-500/30 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void inspectInvoice()}
+                disabled={invoiceBusy || replacementBusy || !invoiceWireId.trim()}
+                className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {invoiceBusy ? 'Inspecting…' : 'Inspect Invoice'}
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-500/65">Replacement file</span>
+                <input
+                  key={invoiceFile?.name ?? 'empty-invoice-input'}
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png"
+                  onChange={(event) => setInvoiceFile(event.target.files?.[0] ?? null)}
+                  className="block w-full rounded-lg border border-emerald-500/20 bg-black/40 px-3 py-2 text-sm text-emerald-100 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-500/15 file:px-3 file:py-1.5 file:font-semibold file:text-emerald-200 hover:file:bg-emerald-500/25"
+                />
+                <span className="mt-1.5 block text-xs text-emerald-500/50">PDF, JPG, or PNG · maximum 2 MB. Original content is archived privately before replacement.</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => void replaceInvoice()}
+                disabled={replacementBusy || invoiceBusy || !invoiceWireId.trim() || !invoiceFile}
+                className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {replacementBusy ? 'Replacing…' : 'Replace & Audit'}
+              </button>
+            </div>
+
+            {invoiceError && <p role="alert" className="rounded-lg border border-red-500/25 bg-red-950/20 px-3 py-2 text-sm text-red-200">{invoiceError}</p>}
+            {invoiceStatus && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-100">{invoiceStatus}</p>}
+
+            {invoiceUrl && (
+              <div className="overflow-hidden rounded-xl border border-emerald-500/20 bg-black/30">
+                <div className="flex flex-col gap-2 border-b border-emerald-500/15 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="font-mono text-xs text-emerald-200">Temporary invoice preview · expires in 60 seconds</p>
+                  <a href={invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-emerald-300 underline decoration-emerald-500/40 underline-offset-4 hover:text-emerald-100">
+                    Open secure preview
+                  </a>
+                </div>
+                <iframe
+                  src={invoiceUrl}
+                  title={`Invoice preview for wire ${invoiceWireId}`}
+                  referrerPolicy="no-referrer"
+                  className="h-[520px] w-full bg-white"
+                />
+              </div>
+            )}
           </section>
 
           {migrationPending && (
