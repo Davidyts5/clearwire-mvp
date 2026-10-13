@@ -23,12 +23,20 @@ export const GET = withAuth([...ROLE_VALUES], async (req, ctx, auth) => {
   const limit = Math.min(Number(searchParams.get('limit')) || 50, 100);
   const offset = Number(searchParams.get('offset')) || 0;
 
+  const needsQuarantineFilter = auth.role === ROLES.CFO || auth.role === ROLES.CONTROLLER;
   let query = auth.supabase.from('wire_requests').select('*').eq('company_id', auth.companyId).order('created_at', { ascending: false });
   if (auth.role === ROLES.CLERK) query = query.eq('clerk_id', auth.userId);
+  if (needsQuarantineFilter) query = query.lte('visible_after', new Date().toISOString());
 
   // Fetch one extra row to detect if there's a next page, without a second query.
   const { data, error } = await query.range(offset, offset + limit);
-  if (error) return NextResponse.json({ error: 'Database error' }, { status: 500 });
+  if (error) {
+    // Fail closed if this endpoint is deployed before the quarantine migration.
+    if (needsQuarantineFilter && (error.code === '42703' || error.code === 'PGRST204')) {
+      return NextResponse.json({ error: 'Inbound quarantine is unavailable until the database migration is applied.' }, { status: 503 });
+    }
+    return NextResponse.json({ error: 'Database error' }, { status: 500 });
+  }
 
   const hasMore = data.length > limit;
   return NextResponse.json({ success: true, data: data.slice(0, limit), hasMore });
