@@ -58,11 +58,6 @@ export default function LandingPage() {
             <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-[#45564b] transition-colors hover:bg-[#eae9e1] hover:text-[#1e2b24]">
               Sign in
             </Link>
-            <Link href="/signup" className="inline-flex items-center gap-2 rounded-lg bg-[#315741] px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#254733] sm:px-4">
-              <span className="hidden sm:inline">Create workspace</span>
-              <span className="sm:hidden">Get started</span>
-              <ArrowUpRight size={16} aria-hidden="true" />
-            </Link>
           </div>
         </div>
       </header>
@@ -218,9 +213,9 @@ export default function LandingPage() {
             <p className="mt-5 max-w-sm text-sm leading-6 text-[#69746b]">
               Keep the people, details, and checks around a payment in one deliberate path—not scattered across a busy inbox.
             </p>
-            <Link href="/signup" className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-[#315741] transition-colors hover:text-[#1f3e2b]">
-              Create a workspace <ArrowRight size={16} aria-hidden="true" />
-            </Link>
+            <a href="mailto:davidlucasonorigho@gmail.com?subject=Request%20Access" className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-[#315741] transition-colors hover:text-[#1f3e2b]">
+              Request access <ArrowRight size={16} aria-hidden="true" />
+            </a>
           </div>
 
           <div className="divide-y divide-[#dedfd6] border-y border-[#dedfd6]">
@@ -282,9 +277,9 @@ export default function LandingPage() {
               ClearWire governs and records the internal request and approval. Your team remains in control of releasing the payment through its existing process.
             </p>
           </div>
-          <Link href="/signup" className="inline-flex min-h-12 items-center justify-center gap-2 self-start rounded-lg bg-[#f5f4ee] px-5 py-3 text-sm font-semibold text-[#2c4935] transition-colors hover:bg-white md:self-center">
-            Create workspace <ArrowUpRight size={16} aria-hidden="true" />
-          </Link>
+          <a href="mailto:davidlucasonorigho@gmail.com?subject=Request%20Access" className="inline-flex min-h-12 items-center justify-center gap-2 self-start rounded-lg bg-[#f5f4ee] px-5 py-3 text-sm font-semibold text-[#2c4935] transition-colors hover:bg-white md:self-center">
+            Request access <ArrowUpRight size={16} aria-hidden="true" />
+          </a>
         </div>
       </section>
 
