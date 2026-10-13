@@ -2,8 +2,10 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { rpName, getRpId, getOrigin, uint8ArrayToBase64 } from '@/lib/webauthn';
-import { withAuth } from '@/lib/api-auth';
+import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { UAParser } from 'ua-parser-js';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 export const POST = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, auth) => {
   const rawBody = await req.json();
@@ -38,40 +40,69 @@ export const POST = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, aut
       const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
       const { publicKey, id: credentialID, counter } = credential;
 
-      // Fix 3: Capture Server-Side Geo Location
+      // Parse the HTTP User-Agent on the server. Client hints remain supplemental metadata,
+      // not an authentication or security signal.
+      const userAgent = req.headers.get('user-agent') || '';
+      const uaResult = new UAParser(userAgent).getResult();
+      const clientBrowser = typeof metadata?.browser === 'string' ? metadata.browser.slice(0, 100) : '';
+      const clientOs = typeof metadata?.os === 'string' ? metadata.os.slice(0, 100) : '';
+      const browserName = uaResult.browser.name || clientBrowser || 'Unknown Browser';
+      const browserVersion = uaResult.browser.major || '';
+      const browser = browserVersion ? `${browserName} ${browserVersion}` : browserName;
+      const os = uaResult.os.name || clientOs || 'Unknown Device';
+      const parsedFormFactor = uaResult.device.type === 'mobile'
+        ? 'Mobile'
+        : uaResult.device.type === 'tablet'
+          ? 'Tablet'
+          : 'Desktop';
+      const clientFormFactor = ['Mobile', 'Tablet', 'Desktop', 'SmartTV'].includes(metadata?.formFactor)
+        ? metadata.formFactor
+        : null;
+      const formFactor = parsedFormFactor === 'Desktop' && clientFormFactor ? clientFormFactor : parsedFormFactor;
+
+      // Capture server-provided Geo Location
       // Vercel injects location headers automatically if you use the edge network.
       // We fall back to standard reverse proxy headers for self-hosting.
-      let registeredLocation = 'Unknown Location';
-      const city = req.headers.get('x-vercel-ip-city') || req.headers.get('x-real-ip-city');
-      const country = req.headers.get('x-vercel-ip-country') || req.headers.get('x-real-ip-country');
-      
-      if (city && country) {
-        registeredLocation = `${city}, ${country}`;
-      } else if (country) {
-        registeredLocation = country;
-      }
+      const countryHeader = req.headers.get('x-vercel-ip-country') || req.headers.get('x-real-ip-country');
+      const registeredLocation = countryHeader?.trim().slice(0, 8).toUpperCase() || null;
 
-      const { error: insertError } = await auth.supabase.from('user_authenticators').insert([{
+      const adminClient = await getAdminClient();
+      const { data: registeredDevice, error: insertError } = await adminClient.from('user_authenticators').insert([{
         user_id: auth.userId,
-        credential_id: credentialID, 
-        credential_public_key: uint8ArrayToBase64(publicKey), 
+        credential_id: credentialID,
+        credential_public_key: uint8ArrayToBase64(publicKey),
         counter: counter,
         credential_device_type: credentialDeviceType,
         credential_backed_up: credentialBackedUp,
         transports: body.response.transports || [],
-        device_name: metadata ? `${metadata.browser} on ${metadata.os}` : 'Security Key',
-        browser: metadata?.browser || 'Unknown Browser',
-        os: metadata?.os || 'Unknown Device',
-        form_factor: metadata?.formFactor || 'Desktop',
-        registered_location: registeredLocation // Track immutable server-derived geo
-      }]);
+        device_name: `${browser} on ${os}`.slice(0, 160),
+        browser,
+        os,
+        form_factor: formFactor,
+        registered_location: registeredLocation,
+      }]).select('id, device_name, browser, os, form_factor, registered_location').single();
 
       if (insertError) {
         console.error("Insert Authenticator Error:", insertError);
         return NextResponse.json({ error: 'Failed to save authenticator to DB.' }, { status: 500 });
       }
 
-      await auth.supabase.from('webauthn_challenges').delete().eq('id', challengeData.id);
+      await appendAuditLog(adminClient, {
+        companyId: auth.companyId,
+        wireId: null,
+        actorId: auth.userId,
+        action: 'PASSKEY_DEVICE_REGISTERED',
+        eventPayload: {
+          device_id: registeredDevice.id,
+          device_name: registeredDevice.device_name,
+          browser: registeredDevice.browser,
+          os: registeredDevice.os,
+          form_factor: registeredDevice.form_factor,
+          registered_location: registeredDevice.registered_location,
+        },
+      });
+
+      await adminClient.from('webauthn_challenges').delete().eq('id', challengeData.id).eq('user_id', auth.userId);
       return NextResponse.json({ success: true });
     }
 

@@ -2,10 +2,15 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { getVisibleWireIds } from '@/lib/inbound-quarantine';
 
 // Only Auditors and CFOs have forensic timeline access
 export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, ctx, auth) => {
   try {
+    const visibleWireIds = auth.role === ROLES.CFO
+      ? await getVisibleWireIds(auth.supabase, auth.companyId, new Date().toISOString())
+      : null;
+
     const { searchParams } = new URL(req.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
@@ -37,10 +42,13 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, ctx, auth) =
 
     if (error) throw error;
 
+    const visibleLogs = (logs || []).filter((log: any) =>
+      !visibleWireIds || !log.wire_id || visibleWireIds.has(log.wire_id)
+    );
     const headers = new Headers();
     headers.set('Cache-Control', 'no-store');
 
-    return NextResponse.json({ success: true, data: logs }, { status: 200, headers });
+    return NextResponse.json({ success: true, data: visibleLogs }, { status: 200, headers });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

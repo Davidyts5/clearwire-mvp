@@ -10,7 +10,8 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
     const startDate = searchParams.get('startDate') || undefined;
     const endDate = searchParams.get('endDate') || undefined;
 
-    const result = await getVendorLeaderboardData(auth.supabase, auth.companyId, startDate, endDate);
+    const visibleAfterOrBefore = auth.role === ROLES.CFO ? new Date().toISOString() : undefined;
+    const result = await getVendorLeaderboardData(auth.supabase, auth.companyId, startDate, endDate, visibleAfterOrBefore);
     return NextResponse.json({ success: true, data: result });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

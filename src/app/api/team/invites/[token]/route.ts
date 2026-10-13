@@ -3,10 +3,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { getAdminClient } from '@/lib/api-auth';
+import { appendAuditLog } from '@/lib/audit-chain';
+import { TERMS_VERSION, PRIVACY_NOTICE_VERSION } from '@/lib/legal';
 
 const AcceptInviteSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters long"),
-  fullName: z.string().min(2, "Full name is required")
+  fullName: z.string().min(2, "Full name is required"),
+  termsAccepted: z.literal(true)
 });
 
 export async function GET(req: Request, { params }: { params: { token: string } }) {
@@ -42,7 +45,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
     if (new Date() > new Date(invite.expires_at)) return NextResponse.json({ error: 'Invite link has expired' }, { status: 400 });
 
     const { data: authData, error: authError } = await supabase.auth.signUp({ email: invite.email, password: parsed.password });
-    if (authError || !authData.user) return NextResponse.json({ error: authError?.message || 'Failed to create secure account' }, { status: 400 });
+    if (authError || !authData.user) return NextResponse.json({ error: authError?.message || 'Failed to create account' }, { status: 400 });
 
     // Ensure we pass can_unfreeze through the RPC
     const { error: dbError } = await supabaseAdmin.rpc('provision_invited_user', {
@@ -60,6 +63,24 @@ export async function POST(req: Request, { params }: { params: { token: string }
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(console.error);
       return NextResponse.json({ error: `Provisioning RPC Failed: ${dbError.message}` }, { status: 500 });
     }
+
+    await appendAuditLog(supabaseAdmin, {
+      companyId: invite.company_id,
+      wireId: null,
+      actorId: authData.user.id,
+      action: 'INVITATION_ACCEPTED',
+      eventPayload: {
+        invite_id: invite.id,
+        email: invite.email,
+        role: invite.role,
+        full_name: parsed.fullName,
+        legal_acceptance: {
+          terms_version: TERMS_VERSION,
+          privacy_notice_version: PRIVACY_NOTICE_VERSION,
+          accepted_at: new Date().toISOString(),
+        },
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

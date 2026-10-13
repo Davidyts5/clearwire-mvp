@@ -8,14 +8,34 @@ import { checkRateLimit } from '@/lib/rate-limit';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   // RATE LIMITING FIX: Prevent attackers from spamming challenge generation
-  const isAllowed = checkRateLimit(`webauthn_gen_${auth.userId}`, 10, 60000);
+  const isAllowed = await checkRateLimit(`webauthn_gen_${auth.userId}`, 10, 60000);
   if (!isAllowed) {
     return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
   }
 
+  const { data: visibleWire, error: visibilityError } = await auth.supabase
+    .from('wire_requests')
+    .select('id')
+    .eq('id', params.id)
+    .eq('company_id', auth.companyId)
+    .lte('visible_after', new Date().toISOString())
+    .maybeSingle();
+  if (visibilityError || !visibleWire) {
+    return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+  }
+
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-  const { data: wireData } = await auth.supabase.from('wire_requests').select('amount').eq('id', params.id).single();
+  const { data: wireData, error: wireError } = await auth.supabase
+    .from('wire_requests')
+    .select('amount')
+    .eq('id', params.id)
+    .eq('company_id', auth.companyId)
+    .lte('visible_after', new Date().toISOString())
+    .maybeSingle();
+  if (wireError || !wireData) {
+    return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+  }
   
   if (auth.role === ROLES.CONTROLLER) {
     const { data: userData } = await auth.supabase.from('users').select('approval_limit').eq('id', auth.userId).single();

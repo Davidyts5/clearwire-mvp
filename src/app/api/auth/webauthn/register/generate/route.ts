@@ -2,14 +2,14 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 import { rpName, getRpId } from '@/lib/webauthn';
-import { withAuth } from '@/lib/api-auth';
+import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { isoUint8Array } from '@simplewebauthn/server/helpers';
 import { ROLES } from '@/lib/roles';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 export const GET = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, auth) => {
   // RATE LIMITING FIX
-  const isAllowed = checkRateLimit(`webauthn_reg_gen_${auth.userId}`, 10, 60000);
+  const isAllowed = await checkRateLimit(`webauthn_reg_gen_${auth.userId}`, 10, 60000);
   if (!isAllowed) {
     return NextResponse.json({ error: 'Rate limit exceeded. Please wait 60 seconds.' }, { status: 429 });
   }
@@ -42,9 +42,10 @@ export const GET = withAuth([ROLES.CFO, ROLES.CONTROLLER], async (req, ctx, auth
     },
   });
 
-  await auth.supabase.from('webauthn_challenges').delete().eq('user_id', auth.userId).eq('context', 'registration');
-  
-  const { error: insertError } = await auth.supabase.from('webauthn_challenges').insert([{
+  const adminClient = await getAdminClient();
+  await adminClient.from('webauthn_challenges').delete().eq('user_id', auth.userId).eq('context', 'registration');
+
+  const { error: insertError } = await adminClient.from('webauthn_challenges').insert([{
     user_id: auth.userId,
     challenge: options.challenge,
     context: 'registration',

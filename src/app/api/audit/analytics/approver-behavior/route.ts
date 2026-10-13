@@ -15,6 +15,7 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
       .from('wire_requests')
       .select('id, created_at, risk_score, status')
       .eq('company_id', auth.companyId);
+    if (auth.role === ROLES.CFO) wQuery = wQuery.lte('visible_after', new Date().toISOString());
 
     if (startDate) wQuery = wQuery.gte('created_at', startDate);
     if (endDate) wQuery = wQuery.lte('created_at', endDate);

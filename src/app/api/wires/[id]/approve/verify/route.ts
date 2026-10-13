@@ -9,18 +9,30 @@ import { ROLES } from '@/lib/roles';
 import { appendAuditLog } from '@/lib/audit-chain';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
+  const { data: visibleWire, error: visibilityError } = await auth.supabase
+    .from('wire_requests')
+    .select('id')
+    .eq('id', params.id)
+    .eq('company_id', auth.companyId)
+    .lte('visible_after', new Date().toISOString())
+    .maybeSingle();
+  if (visibilityError || !visibleWire) {
+    return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+  }
+
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
   await verifySegregationOfDuties(auth.supabase, params.id, auth.userId);
 
-
   // Fetch the wire data, including the new phone_number_snapshot and risk_reasons
-  const { data: wireData } = await auth.supabase
+  const { data: wireData, error: wireError } = await auth.supabase
     .from('wire_requests')
     .select('status, amount, vendor_id, account_number_snapshot, swift_bic_snapshot, phone_number_snapshot, risk_reasons')
     .eq('id', params.id)
-    .single();
+    .eq('company_id', auth.companyId)
+    .lte('visible_after', new Date().toISOString())
+    .maybeSingle();
 
-  if (!wireData) return NextResponse.json({ error: 'Wire not found' }, { status: 404 });
+  if (wireError || !wireData) return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
 
   // Phase 4: Gate approval on a callback record existing
   let needsCallback = false;

@@ -19,14 +19,21 @@ export async function GET(req: Request) {
   const { data: pendingWires, error } = await adminClient
     .from('wire_requests')
     .select('*')
-    .in('status', ['pending', 'pending_cfo', 'pending_second_approval']);
+    .in('status', ['pending', 'pending_cfo', 'pending_second_approval'])
+    // Never remind or escalate an approver before the quarantine visibility time.
+    .lte('visible_after', new Date(now).toISOString());
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   let reminders = 0, escalations = 0;
 
   for (const wire of pendingWires || []) {
-    const ageHours = (now - new Date(wire.created_at).getTime()) / (1000 * 60 * 60);
+    const createdAtMs = new Date(wire.created_at).getTime();
+    const visibleAfterMs = wire.visible_after ? new Date(wire.visible_after).getTime() : createdAtMs;
+    const notificationStartMs = Number.isFinite(visibleAfterMs)
+      ? Math.max(createdAtMs, visibleAfterMs)
+      : createdAtMs;
+    const ageHours = (now - notificationStartMs) / (1000 * 60 * 60);
     const lastReminderHoursAgo = wire.last_reminder_sent_at
       ? (now - new Date(wire.last_reminder_sent_at).getTime()) / (1000 * 60 * 60)
       : Infinity;

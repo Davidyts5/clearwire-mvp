@@ -16,11 +16,14 @@ export default function Sidebar() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const isAuthRoute = pathname === '/login' || pathname === '/' || pathname.startsWith('/invite') || pathname === '/signup';
+  const isAuthRoute = pathname === '/login' || pathname === '/' || pathname.startsWith('/invite') || pathname === '/signup' || pathname === '/terms' || pathname === '/cookies' || pathname === '/third-party-notices' || pathname.startsWith('/privacy');
 
   useEffect(() => {
+    if (isAuthRoute) {
+      setIsLoading(false);
+      return;
+    }
     const supabase = createClient();
-    if (isAuthRoute) return;
 
     const fetchRole = async () => {
       try {

@@ -2,18 +2,32 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { getVisibleWireIds } from '@/lib/inbound-quarantine';
 
 export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, ctx, auth) => {
   try {
     const supabase = auth.supabase;
+    const visibleWireIds = auth.role === ROLES.CFO
+      ? await getVisibleWireIds(supabase, auth.companyId, new Date().toISOString())
+      : null;
 
     const [auditRes, vendorHistRes, invRes] = await Promise.all([
       supabase.from('audit_logs').select('*, users:actor_id(full_name, role)').eq('company_id', auth.companyId).order('created_at', { ascending: false }).limit(200),
       supabase.from('vendor_history').select('*, users:actor_id(full_name, role), vendors(name)').eq('company_id', auth.companyId).order('created_at', { ascending: false }).limit(200),
       supabase.from('investigations').select('*, vendors(name), wire_requests(amount, vendor_name_snapshot, risk_reasons)').eq('company_id', auth.companyId).order('created_at', { ascending: false })
     ]);
+    if (auditRes.error) throw auditRes.error;
+    if (vendorHistRes.error) throw vendorHistRes.error;
+    if (invRes.error) throw invRes.error;
 
-    const investigations = (invRes.data || []).map((inv: any) => ({
+    const auditLogs = (auditRes.data || []).filter((log: any) =>
+      !visibleWireIds || !log.wire_id || visibleWireIds.has(log.wire_id)
+    );
+    const investigationRows = (invRes.data || []).filter((investigation: any) =>
+      !visibleWireIds || !investigation.wire_id || visibleWireIds.has(investigation.wire_id)
+    );
+
+    const investigations = investigationRows.map((inv: any) => ({
       id: inv.id,
       case_number: inv.case_number,
       type: inv.wire_id ? 'WIRE FRAUD' : 'VENDOR ANOMALY',
@@ -26,7 +40,7 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, ctx, auth) =
 
     let timeline: any[] = [];
 
-    (auditRes.data || []).forEach((log: any) => {
+    auditLogs.forEach((log: any) => {
       let category = 'SYSTEM', severity = 'info', title = log.action;
       if (log.action.includes('POLICY')) { category = 'POLICY'; severity = 'warning'; title = 'Security Policy Modified'; }
       else if (log.action.includes('WIRE')) { category = 'WIRE'; severity = log.action.includes('FROZEN') ? 'critical' : log.action.includes('DENIED') ? 'warning' : 'info'; }
@@ -48,7 +62,7 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, ctx, auth) =
     const stats = {
       totalInvestigations: investigations.length,
       openInvestigations: investigations.filter((i:any) => i.status !== 'resolved').length,
-      policyChanges: (auditRes.data || []).filter((l: any) => l.action.includes('POLICY')).length
+      policyChanges: auditLogs.filter((l: any) => l.action.includes('POLICY')).length
     };
 
     return NextResponse.json({ success: true, stats, investigations, timeline });

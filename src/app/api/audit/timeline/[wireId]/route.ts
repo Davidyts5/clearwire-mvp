@@ -6,14 +6,32 @@ import { ROLES } from '@/lib/roles';
 // Only Auditors and CFOs have forensic timeline access
 export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, auth) => {
   try {
+    const needsQuarantineFilter = auth.role === ROLES.CFO;
+    if (needsQuarantineFilter) {
+      const { data: visibleWire, error: visibilityError } = await auth.supabase
+        .from('wire_requests')
+        .select('id')
+        .eq('id', params.wireId)
+        .eq('company_id', auth.companyId)
+        .lte('visible_after', new Date().toISOString())
+        .maybeSingle();
+      if (visibilityError || !visibleWire) {
+        return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+      }
+    }
+
     await verifyTenantResource(auth.supabase, 'wire_requests', params.wireId, auth.companyId);
     
-    // Fetch the wire request to get the vendor_id
-    const { data: wireReq } = await auth.supabase
+    // Fetch the wire request to get the vendor_id; repeat the visibility predicate on CFO reads.
+    let wireQuery = auth.supabase
       .from('wire_requests')
       .select('vendor_id')
-      .eq('id', params.wireId)
-      .single();
+      .eq('id', params.wireId);
+    if (needsQuarantineFilter) wireQuery = wireQuery.lte('visible_after', new Date().toISOString());
+    const { data: wireReq, error: wireError } = await wireQuery.maybeSingle();
+    if (wireError || !wireReq) {
+      return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+    }
 
     const { searchParams } = new URL(req.url);
     const startDate = searchParams.get('startDate');

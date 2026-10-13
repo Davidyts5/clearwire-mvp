@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ShieldCheck, Loader2, Building2, User, Mail, Lock, CheckCircle2, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import LegalLinks from "@/components/LegalLinks";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -17,20 +18,33 @@ export default function SignupPage() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const payload = Object.fromEntries(formData.entries());
+    const payload = {
+      companyName: String(formData.get('companyName') ?? ''),
+      fullName: String(formData.get('fullName') ?? ''),
+      email: String(formData.get('email') ?? ''),
+      password: String(formData.get('password') ?? ''),
+      confirmPassword: String(formData.get('confirmPassword') ?? ''),
+      termsAccepted: formData.get('termsAccepted') === 'on',
+    };
 
     if (payload.password !== payload.confirmPassword) {
       setError("Passwords do not match.");
       setIsSubmitting(false);
       return;
     }
-    delete payload.confirmPassword;
+    const requestPayload = {
+      companyName: payload.companyName,
+      fullName: payload.fullName,
+      email: payload.email,
+      password: payload.password,
+      termsAccepted: payload.termsAccepted,
+    };
 
     try {
       const res = await fetch('/api/auth/onboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(requestPayload)
       });
       
       const json = await res.json();
@@ -66,6 +80,7 @@ export default function SignupPage() {
           <Link href="/login" className="flex w-full justify-center rounded-md border border-transparent bg-slate-900 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-slate-800 transition-colors">
             Return to Login
           </Link>
+          <LegalLinks className="mt-6 flex justify-center" />
         </div>
       </div>
     );
@@ -132,6 +147,18 @@ export default function SignupPage() {
               </div>
             </div>
 
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <input id="signup-terms-accepted" name="termsAccepted" type="checkbox" required className="mt-1 h-4 w-4 rounded border-slate-400 accent-[#315741] focus:ring-[#315741]" />
+                <label htmlFor="signup-terms-accepted" className="text-sm leading-6 text-slate-700">
+                  I agree to the Terms of Use and acknowledge the Privacy Notice.
+                </label>
+              </div>
+              <p className="pl-7 text-xs leading-5 text-slate-600">
+                Read the <Link href="/terms" className="font-semibold underline underline-offset-4">Terms of Use</Link> and <Link href="/privacy" className="font-semibold underline underline-offset-4">Privacy Notice</Link> before creating a workspace.
+              </p>
+            </div>
+
             <div>
               <button
                 type="submit"
@@ -149,6 +176,7 @@ export default function SignupPage() {
           <p className="text-slate-500 text-sm">
             Already have an account? <Link href="/login" className="font-bold text-blue-600 hover:underline">Sign in securely</Link>
           </p>
+          <LegalLinks className="flex justify-center" />
         </div>
       </div>
     </div>

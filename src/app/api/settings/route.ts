@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { withAuth } from '@/lib/api-auth';
+import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES, ROLE_VALUES } from '@/lib/roles';
 import { appendAuditLog } from '@/lib/audit-chain';
 
@@ -71,7 +71,8 @@ export const PUT = withAuth([ROLES.CFO], async (req, ctx, auth) => {
 
     // Security Requirement: Log policy changes to the WORM Audit Log
     if (body.vendor_auth_policy !== undefined && oldSettings && oldSettings.vendor_auth_policy !== body.vendor_auth_policy) {
-      await appendAuditLog(auth.supabase, {
+      const adminClient = await getAdminClient();
+      await appendAuditLog(adminClient, {
         companyId: auth.companyId,
         wireId: null,
         actorId: auth.userId,

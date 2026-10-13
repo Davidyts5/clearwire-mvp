@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { withAuth, verifyTenantResource } from '@/lib/api-auth';
+import { withAuth, verifyTenantResource, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 import { appendAuditLog } from '@/lib/audit-chain';
 
@@ -26,7 +26,8 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
     if (error) throw error;
 
-    await appendAuditLog(auth.supabase, {
+    const adminClient = await getAdminClient();
+    await appendAuditLog(adminClient, {
       companyId: auth.companyId,
       wireId: null,
       actorId: auth.userId,

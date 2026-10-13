@@ -5,6 +5,7 @@ import { ShieldCheck, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import Link from "next/link"; 
 import { ROLES, Permissions } from "@/lib/roles";
+import LegalLinks from "@/components/LegalLinks";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -116,6 +117,7 @@ export default function Login() {
           <p className="text-slate-500 text-sm">
             Not part of a workspace yet? <Link href="/signup" className="font-bold text-blue-600 hover:underline">Create Company</Link>
           </p>
+          <LegalLinks className="flex justify-center" />
         </div>
       </div>
     </div>
