@@ -8,6 +8,8 @@ import {
   Eye,
   EyeOff,
   Lock,
+  Pencil,
+  RefreshCw,
   Shield,
   Users,
   Wallet,
@@ -76,6 +78,24 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
   const [replacementBusy, setReplacementBusy] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [invoiceStatus, setInvoiceStatus] = useState<string | null>(null);
+  const [vendorId, setVendorId] = useState('');
+  const [vendorCompanyId, setVendorCompanyId] = useState('');
+  const [vendorName, setVendorName] = useState('');
+  const [vendorAccountNumber, setVendorAccountNumber] = useState('');
+  const [vendorSwiftBic, setVendorSwiftBic] = useState('');
+  const [vendorLoaded, setVendorLoaded] = useState(false);
+  const [vendorBusy, setVendorBusy] = useState(false);
+  const [vendorSaveBusy, setVendorSaveBusy] = useState(false);
+  const [vendorError, setVendorError] = useState<string | null>(null);
+  const [vendorStatus, setVendorStatus] = useState<string | null>(null);
+  const [wireStateId, setWireStateId] = useState('');
+  const [wireStateCompanyId, setWireStateCompanyId] = useState('');
+  const [wireStateStatus, setWireStateStatus] = useState('pending_cfo');
+  const [wireCurrentStatus, setWireCurrentStatus] = useState<string | null>(null);
+  const [wireStateBusy, setWireStateBusy] = useState(false);
+  const [wireStateSaveBusy, setWireStateSaveBusy] = useState(false);
+  const [wireStateError, setWireStateError] = useState<string | null>(null);
+  const [wireStateMessage, setWireStateMessage] = useState<string | null>(null);
   const toggleGhostMode = () => setGhostMode((current) => !current);
   const formattedVolume = formatUsd(telemetry.totalWireVolumeUsd);
 
@@ -136,6 +156,124 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
       setReplacementBusy(false);
     }
   };
+
+  const fetchVendor = async () => {
+    if (!vendorId.trim()) {
+      setVendorError('Enter a vendor ID first.');
+      return;
+    }
+    setVendorBusy(true);
+    setVendorError(null);
+    setVendorStatus(null);
+    setVendorLoaded(false);
+    try {
+      const response = await fetch(`/api/god-mode/vendors/${encodeURIComponent(vendorId.trim())}`, { method: 'GET', cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok || !result.success || !result.data) {
+        throw new Error(result.error || 'Vendor lookup failed.');
+      }
+      setVendorCompanyId(result.data.company_id || '');
+      setVendorName(result.data.name || '');
+      setVendorAccountNumber(result.data.account_number || '');
+      setVendorSwiftBic(result.data.swift_bic || '');
+      setVendorLoaded(true);
+      setVendorStatus('Vendor loaded. Review the current details, edit them, then save — the old and new values are recorded in the WORM audit chain.');
+    } catch (error) {
+      setVendorError(error instanceof Error ? error.message : 'Vendor lookup failed.');
+    } finally {
+      setVendorBusy(false);
+    }
+  };
+
+  const saveVendor = async () => {
+    if (!vendorLoaded) {
+      setVendorError('Fetch the vendor first.');
+      return;
+    }
+    setVendorSaveBusy(true);
+    setVendorError(null);
+    setVendorStatus(null);
+    try {
+      const response = await fetch(`/api/god-mode/vendors/${encodeURIComponent(vendorId.trim())}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: vendorName,
+          account_number: vendorAccountNumber,
+          swift_bic: vendorSwiftBic,
+          company_id: vendorCompanyId,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Vendor update failed.');
+      }
+      setVendorStatus(result.message || 'Vendor updated and recorded in the WORM audit chain.');
+    } catch (error) {
+      setVendorError(error instanceof Error ? error.message : 'Vendor update failed.');
+    } finally {
+      setVendorSaveBusy(false);
+    }
+  };
+
+  const fetchWireState = async () => {
+    if (!wireStateId.trim()) {
+      setWireStateError('Enter a wire ID first.');
+      return;
+    }
+    setWireStateBusy(true);
+    setWireStateError(null);
+    setWireStateMessage(null);
+    setWireCurrentStatus(null);
+    try {
+      const response = await fetch(`/api/god-mode/wires/${encodeURIComponent(wireStateId.trim())}/state`, { method: 'GET', cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok || !result.success || !result.data) {
+        throw new Error(result.error || 'Wire lookup failed.');
+      }
+      setWireStateCompanyId(result.data.company_id || '');
+      setWireCurrentStatus(result.data.status || null);
+      setWireStateMessage(`Current status: ${result.data.status}. Choose the forced status below — the previous and new statuses are recorded in the WORM audit chain.`);
+    } catch (error) {
+      setWireStateError(error instanceof Error ? error.message : 'Wire lookup failed.');
+    } finally {
+      setWireStateBusy(false);
+    }
+  };
+
+  const forceWireState = async () => {
+    if (!wireStateId.trim() || !wireStateCompanyId.trim()) {
+      setWireStateError('Enter a wire ID and fetch it (or enter its workspace/company ID) first.');
+      return;
+    }
+    setWireStateSaveBusy(true);
+    setWireStateError(null);
+    setWireStateMessage(null);
+    try {
+      const response = await fetch(`/api/god-mode/wires/${encodeURIComponent(wireStateId.trim())}/state`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: wireStateStatus, company_id: wireStateCompanyId }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Wire state override failed.');
+      }
+      setWireCurrentStatus(result.data?.status || wireStateStatus);
+      setWireStateMessage(
+        result.message
+          ? `${result.message}${result.data?.previous_status ? ` (${result.data.previous_status} → ${result.data.status})` : ''}`
+          : 'Wire state forced and recorded in the WORM audit chain.',
+      );
+    } catch (error) {
+      setWireStateError(error instanceof Error ? error.message : 'Wire state override failed.');
+    } finally {
+      setWireStateSaveBusy(false);
+    }
+  };
+
+  const supportInputClassName = 'w-full rounded-lg border border-emerald-500/20 bg-black/40 px-3 py-2.5 font-mono text-sm text-emerald-100 placeholder:text-emerald-500/30 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20';
+  const supportLabelClassName = 'mb-1.5 block font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-500/65';
 
   return (
     <div className="fixed inset-0 z-[200] overflow-y-auto bg-[#0a0a0a] text-emerald-500 selection:bg-emerald-500/30 selection:text-emerald-100">
@@ -293,6 +431,167 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                 />
               </div>
             )}
+          </section>
+
+          <section className="space-y-4 rounded-xl border border-emerald-500/20 bg-[#101410] p-4 sm:p-5" aria-labelledby="vendor-editing-title">
+            <div>
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Pencil size={16} aria-hidden="true" />
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/60">Vendor support</p>
+              </div>
+              <h2 id="vendor-editing-title" className="mt-2 text-lg font-semibold text-emerald-100">Edit Vendor Details</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-emerald-100/70">
+                Fetch a vendor by ID, review its current bank details, and save corrections. Every edit is written to the WORM ledger as{' '}
+                <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">VENDOR_MODIFIED_BY_SUPPORT</code>{' '}
+                with the old and new values. Ghost Mode does not suppress this logging.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="block">
+                <span className={supportLabelClassName}>Vendor ID</span>
+                <input
+                  value={vendorId}
+                  onChange={(event) => {
+                    setVendorId(event.target.value);
+                    setVendorLoaded(false);
+                    setVendorError(null);
+                    setVendorStatus(null);
+                  }}
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder="Enter the vendor UUID"
+                  className={supportInputClassName}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void fetchVendor()}
+                disabled={vendorBusy || vendorSaveBusy || !vendorId.trim()}
+                className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {vendorBusy ? 'Fetching…' : 'Fetch Vendor'}
+              </button>
+            </div>
+
+            {vendorLoaded && (
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className={supportLabelClassName}>Vendor name</span>
+                    <input value={vendorName} onChange={(event) => setVendorName(event.target.value)} autoComplete="off" className={supportInputClassName} />
+                  </label>
+                  <label className="block">
+                    <span className={supportLabelClassName}>Workspace (Company ID)</span>
+                    <input value={vendorCompanyId} readOnly aria-readonly="true" className={`${supportInputClassName} opacity-60`} />
+                  </label>
+                  <label className="block">
+                    <span className={supportLabelClassName}>Account number</span>
+                    <input value={vendorAccountNumber} onChange={(event) => setVendorAccountNumber(event.target.value)} autoComplete="off" className={supportInputClassName} />
+                  </label>
+                  <label className="block">
+                    <span className={supportLabelClassName}>SWIFT / BIC</span>
+                    <input value={vendorSwiftBic} onChange={(event) => setVendorSwiftBic(event.target.value)} autoComplete="off" placeholder="Optional" className={supportInputClassName} />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void saveVendor()}
+                  disabled={vendorSaveBusy || vendorBusy || !vendorName.trim() || !vendorAccountNumber.trim()}
+                  className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {vendorSaveBusy ? 'Saving…' : 'Save Vendor & Audit'}
+                </button>
+              </div>
+            )}
+
+            {vendorError && <p role="alert" className="rounded-lg border border-red-500/25 bg-red-950/20 px-3 py-2 text-sm text-red-200">{vendorError}</p>}
+            {vendorStatus && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-100">{vendorStatus}</p>}
+          </section>
+
+          <section className="space-y-4 rounded-xl border border-emerald-500/20 bg-[#101410] p-4 sm:p-5" aria-labelledby="wire-state-title">
+            <div>
+              <div className="flex items-center gap-2 text-emerald-400">
+                <RefreshCw size={16} aria-hidden="true" />
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/60">Wire support</p>
+              </div>
+              <h2 id="wire-state-title" className="mt-2 text-lg font-semibold text-emerald-100">Wire State Override — Force Push</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-emerald-100/70">
+                Force a wire into a new status. Every override is written to the WORM ledger as{' '}
+                <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">WIRE_STATE_FORCED_BY_SUPPORT</code>{' '}
+                with the previous and new statuses. Ghost Mode does not suppress this logging.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="block">
+                <span className={supportLabelClassName}>Wire ID</span>
+                <input
+                  value={wireStateId}
+                  onChange={(event) => {
+                    setWireStateId(event.target.value);
+                    setWireCurrentStatus(null);
+                    setWireStateError(null);
+                    setWireStateMessage(null);
+                  }}
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder="Enter the wire UUID"
+                  className={supportInputClassName}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void fetchWireState()}
+                disabled={wireStateBusy || wireStateSaveBusy || !wireStateId.trim()}
+                className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {wireStateBusy ? 'Fetching…' : 'Fetch Wire'}
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 sm:items-end">
+              <label className="block">
+                <span className={supportLabelClassName}>Workspace (Company ID)</span>
+                <input
+                  value={wireStateCompanyId}
+                  onChange={(event) => setWireStateCompanyId(event.target.value)}
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder="Filled in by Fetch Wire"
+                  className={supportInputClassName}
+                />
+              </label>
+              <label className="block">
+                <span className={supportLabelClassName}>Current status</span>
+                <input value={wireCurrentStatus ?? '—'} readOnly aria-readonly="true" className={`${supportInputClassName} opacity-60`} />
+              </label>
+              <label className="block">
+                <span className={supportLabelClassName}>Force to status</span>
+                <select
+                  value={wireStateStatus}
+                  onChange={(event) => setWireStateStatus(event.target.value)}
+                  className={supportInputClassName}
+                >
+                  <option value="pending_cfo">pending_cfo</option>
+                  <option value="approved">approved</option>
+                  <option value="rejected">rejected</option>
+                  <option value="frozen">frozen</option>
+                </select>
+              </label>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void forceWireState()}
+              disabled={wireStateSaveBusy || wireStateBusy || !wireStateId.trim() || !wireStateCompanyId.trim()}
+              className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {wireStateSaveBusy ? 'Forcing…' : 'Force Wire State & Audit'}
+            </button>
+
+            {wireStateError && <p role="alert" className="rounded-lg border border-red-500/25 bg-red-950/20 px-3 py-2 text-sm text-red-200">{wireStateError}</p>}
+            {wireStateMessage && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-100">{wireStateMessage}</p>}
           </section>
 
           {migrationPending && (
