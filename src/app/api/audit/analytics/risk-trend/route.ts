@@ -13,7 +13,8 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
     const startDate = searchParams.get('startDate') || defaultStart.toISOString();
     const endDate = searchParams.get('endDate') || new Date().toISOString();
 
-    const data = await getRiskTrendData(auth.supabase, auth.companyId, bucket, startDate, endDate);
+    const visibleAfterOrBefore = auth.role === ROLES.CFO ? new Date().toISOString() : undefined;
+    const data = await getRiskTrendData(auth.supabase, auth.companyId, bucket, startDate, endDate, visibleAfterOrBefore);
     return NextResponse.json({ success: true, data: data.buckets });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

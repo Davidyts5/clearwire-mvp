@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withAuth, verifyTenantResource, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { appendAuditLog } from '@/lib/audit-chain';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   try {
@@ -18,9 +19,18 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       
       if (error) throw error;
 
-      await auth.supabase.from('audit_logs').insert([{
-        company_id: auth.companyId, wire_id: '00000000-0000-0000-0000-000000000000', actor_id: auth.userId, action: 'VENDOR_CHANGE_REJECTED', new_hash: 'SYSTEM'
-      }]);
+      const adminClient = await getAdminClient();
+      await appendAuditLog(adminClient, {
+        companyId: auth.companyId,
+        wireId: null,
+        actorId: auth.userId,
+        action: 'VENDOR_CHANGE_REJECTED',
+        eventPayload: {
+          type: 'VENDOR_CHANGE_REJECTED',
+          vendor_change_request_id: params.id,
+          rejection_notes: rejection_notes || null,
+        },
+      });
 
       return NextResponse.json({ success: true, data });
     }

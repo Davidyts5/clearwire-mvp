@@ -191,11 +191,58 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
 
     if (dbError) return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
 
-    await appendAuditLog(auth.supabase, {
-      companyId: auth.companyId, wireId: requestData.id, actorId: auth.userId, action: 'CREATED', eventPayload: { amount: parsed.amount, vendor: vendorTrimmed, risk_score: riskAnalysis.totalScore, risk_reasons: riskAnalysis.reasons }
+    const adminClient = await getAdminClient();
+    await appendAuditLog(adminClient, {
+      companyId: auth.companyId,
+      wireId: requestData.id,
+      actorId: auth.userId,
+      action: 'CREATED',
+      eventPayload: {
+        amount: parsed.amount,
+        vendor: vendorTrimmed,
+        risk_score: riskAnalysis.totalScore,
+        risk_reasons: riskAnalysis.reasons,
+      },
     });
 
-    if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
+    // Fail closed: if we cannot confirm the owning company's quarantine settings,
+    // do not disclose this wire through an immediate notification channel.
+    let suppressImmediateNotifications = true;
+    if (finalVendorId) {
+      try {
+        const { data: vendorOwner, error: ownerError } = await adminClient
+          .from('vendors')
+          .select('company_id')
+          .eq('id', finalVendorId)
+          .maybeSingle();
+
+        if (!ownerError && vendorOwner?.company_id === auth.companyId) {
+          const { data: company, error: companyError } = await adminClient
+            .from('companies')
+            .select('inbound_delay_minutes')
+            .eq('id', vendorOwner.company_id)
+            .maybeSingle();
+
+          if (!companyError && company) {
+            const configuredDelay = Number(company.inbound_delay_minutes ?? 0);
+            const visibleAfterMs = requestData.visible_after
+              ? Date.parse(requestData.visible_after)
+              : Number.NaN;
+            if (Number.isFinite(configuredDelay)) {
+              suppressImmediateNotifications = configuredDelay > 0 ||
+                !Number.isFinite(visibleAfterMs) ||
+                visibleAfterMs > Date.now();
+            }
+          }
+        }
+      } catch (quarantineLookupError) {
+        console.error('Could not verify inbound quarantine settings; immediate notifications suppressed.', quarantineLookupError);
+      }
+    }
+
+    if (suppressImmediateNotifications) {
+      console.info(`Immediate approver notifications suppressed for quarantined or unverified wire ${requestData.id}.`);
+    } else if (riskAnalysis.recommendedStatus !== 'frozen' && process.env.TWILIO_SID) {
       try {
         const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -207,38 +254,38 @@ export const POST = withAuth([ROLES.CLERK], async (req, ctx, auth) => {
       } catch (e) {}
     }
 
-    
-    const adminClient = await getAdminClient();
-    if (riskAnalysis.recommendedStatus === 'frozen') {
-      const { data: cfoUsers } = await adminClient.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CFO);
-      if (cfoUsers) {
-        for (const cfo of cfoUsers) {
-          await createNotification(adminClient, {
-            companyId: auth.companyId,
-            userId: cfo.id,
-            type: NOTIFICATION_TYPES.WIRE_FROZEN,
-            title: 'Risk Engine Freeze',
-            message: `A wire to ${parsed.vendor} was automatically frozen. Risk Score: ${riskAnalysis.totalScore}`,
-            actionUrl: `/approve/${requestData.id}`,
-            metadata: { wireAmount: parsed.amount, vendorName: parsed.vendor, riskScore: riskAnalysis.totalScore },
-            relatedWireId: requestData.id,
-          });
+    if (!suppressImmediateNotifications) {
+      if (riskAnalysis.recommendedStatus === 'frozen') {
+        const { data: cfoUsers } = await adminClient.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CFO);
+        if (cfoUsers) {
+          for (const cfo of cfoUsers) {
+            await createNotification(adminClient, {
+              companyId: auth.companyId,
+              userId: cfo.id,
+              type: NOTIFICATION_TYPES.WIRE_FROZEN,
+              title: 'Risk Engine Freeze',
+              message: `A wire to ${parsed.vendor} was automatically frozen. Risk Score: ${riskAnalysis.totalScore}`,
+              actionUrl: `/approve/${requestData.id}`,
+              metadata: { wireAmount: parsed.amount, vendorName: parsed.vendor, riskScore: riskAnalysis.totalScore },
+              relatedWireId: requestData.id,
+            });
+          }
         }
-      }
-    } else {
-      const { data: controllers } = await adminClient.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CONTROLLER);
-      if (controllers) {
-        for (const c of controllers) {
-          await createNotification(adminClient, {
-            companyId: auth.companyId,
-            userId: c.id,
-            type: NOTIFICATION_TYPES.WIRE_PENDING_APPROVAL,
-            title: 'New Wire Request',
-            message: `A wire to ${parsed.vendor} is awaiting your signature.`,
-            actionUrl: `/approve/${requestData.id}`,
-            metadata: { wireAmount: parsed.amount, vendorName: parsed.vendor },
-            relatedWireId: requestData.id,
-          });
+      } else {
+        const { data: controllers } = await adminClient.from('users').select('id').eq('company_id', auth.companyId).eq('role', ROLES.CONTROLLER);
+        if (controllers) {
+          for (const c of controllers) {
+            await createNotification(adminClient, {
+              companyId: auth.companyId,
+              userId: c.id,
+              type: NOTIFICATION_TYPES.WIRE_PENDING_APPROVAL,
+              title: 'New Wire Request',
+              message: `A wire to ${parsed.vendor} is awaiting your signature.`,
+              actionUrl: `/approve/${requestData.id}`,
+              metadata: { wireAmount: parsed.amount, vendorName: parsed.vendor },
+              relatedWireId: requestData.id,
+            });
+          }
         }
       }
     }

@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { withAuth, verifyTenantResource } from '@/lib/api-auth';
+import { withAuth, verifyTenantResource, getAdminClient } from '@/lib/api-auth';
 import { ROLE_VALUES, ROLES } from '@/lib/roles';
 import { z } from 'zod';
 import { appendAuditLog } from '@/lib/audit-chain';
@@ -107,8 +107,9 @@ export const POST = withAuth([ROLES.CLERK], async (req, { params }, auth) => {
       details: { reason, request_id: requestData.id }
     }]);
 
-    // WORM Audit Log
-    await appendAuditLog(auth.supabase, {
+    // WORM Audit Log is appended through the OCC helper using the server-only client.
+    const adminClient = await getAdminClient();
+    await appendAuditLog(adminClient, {
       companyId: auth.companyId, wireId: null, actorId: auth.userId, action: 'VENDOR_CHANGE_REQUESTED', eventPayload: { vendor_id: params.id }
     });
 

@@ -1,11 +1,22 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { withAuth, verifyTenantResource } from '@/lib/api-auth';
+import { withAuth, verifyTenantResource, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
 import { appendAuditLog } from '@/lib/audit-chain';
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   try {
+    const { data: visibleWire, error: visibilityError } = await auth.supabase
+      .from('wire_requests')
+      .select('id')
+      .eq('id', params.id)
+      .eq('company_id', auth.companyId)
+      .lte('visible_after', new Date().toISOString())
+      .maybeSingle();
+    if (visibilityError || !visibleWire) {
+      return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+    }
+
     await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
     const body = await req.json();
@@ -26,7 +37,8 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
 
     if (error) throw error;
 
-    await appendAuditLog(auth.supabase, {
+    const adminClient = await getAdminClient();
+    await appendAuditLog(adminClient, {
       companyId: auth.companyId,
       wireId: params.id,
       actorId: auth.userId,

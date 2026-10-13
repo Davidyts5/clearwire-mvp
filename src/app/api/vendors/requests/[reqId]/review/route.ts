@@ -124,7 +124,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
       details: { reason: parsed.reason, request_id: request.id }
     }]);
 
-    await appendAuditLog(auth.supabase, {
+    await appendAuditLog(supabaseAdmin, {
       companyId: auth.companyId, wireId: null, actorId: auth.userId, action: `VENDOR_CHANGE_${historyAction}`, eventPayload: { request_id: params.reqId }
     });
 
@@ -137,7 +137,7 @@ export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params
         details: { reason: parsed.reason, request_id: request.id }
       }]);
 
-      await appendAuditLog(auth.supabase, {
+      await appendAuditLog(supabaseAdmin, {
         companyId: auth.companyId, wireId: null, actorId: auth.userId, action: 'VENDOR_RESTRICTED', eventPayload: { vendor_id: request.vendor_id }
       });
     }

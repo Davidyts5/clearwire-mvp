@@ -90,13 +90,13 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
             <div className="flex items-center justify-between gap-4 rounded-xl border border-emerald-500/20 bg-[#101410] px-4 py-3 sm:justify-start">
               <div>
                 <p className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-emerald-200">Ghost Mode</p>
-                <p className="mt-1 text-[11px] text-emerald-500/60">UI state only · no actions connected</p>
+                <p className="mt-1 text-[11px] text-emerald-500/60">Display-only switch · never disables WORM logging</p>
               </div>
               <button
                 type="button"
                 role="switch"
                 aria-checked={ghostMode}
-                aria-label={`Ghost Mode ${ghostMode ? 'on' : 'off'} (UI-only)`}
+                aria-label={`Ghost Mode ${ghostMode ? 'on' : 'off'} (display-only; audit logging remains enabled)`}
                 onClick={toggleGhostMode}
                 className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] ${ghostMode ? 'border-amber-400/60 bg-amber-500/20' : 'border-emerald-500/30 bg-emerald-950/80'}`}
               >
@@ -133,14 +133,15 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
               {ghostMode ? <EyeOff className="mt-0.5 shrink-0 text-amber-300" size={18} aria-hidden="true" /> : <Eye className="mt-0.5 shrink-0 text-emerald-400" size={18} aria-hidden="true" />}
               <div>
                 <h2 id="ghost-mode-note" className={`text-sm font-semibold ${ghostMode ? 'text-amber-200' : 'text-emerald-200'}`}>
-                  Ghost Mode {ghostMode ? 'ON' : 'OFF'} · planned behavior
+                  Ghost Mode {ghostMode ? 'ON' : 'OFF'} · audit policy
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-emerald-100/80">
-                  When Ghost Mode is ON, actions bypass the WORM ledger. When OFF, actions log as{' '}
-                  <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">SYSTEM_SUPPORT_INTERVENTION</code>.
+                  Ghost Mode is a request marker, not an audit bypass. ClearWire Security records Super Admin interventions as{' '}
+                  <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">SYSTEM_SUPPORT_INTERVENTION</code>{' '}
+                  in the WORM ledger even when Ghost Mode is requested.
                 </p>
                 <p className="mt-2 text-xs leading-5 text-amber-200/80">
-                  This Phase 1 switch only changes its on-screen state. No privileged actions are wired to it, and it does not bypass or alter audit logging. Future support actions must be explicitly reviewed before implementation.
+                  This switch currently changes only its on-screen state; the dashboard has no support action controls connected to it. The support APIs independently enforce WORM logging and return an audit confirmation.
                 </p>
               </div>
             </div>
@@ -227,7 +228,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
 
           <footer className="flex flex-col gap-2 border-t border-emerald-500/10 pt-4 font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-500/40 sm:flex-row sm:items-center sm:justify-between">
             <span>Restricted system · allowlisted super-admin access</span>
-            <span>Read-only telemetry · no database actions available</span>
+            <span>Dashboard controls are read-only · support actions are API-gated and audited</span>
           </footer>
         </main>
       </div>

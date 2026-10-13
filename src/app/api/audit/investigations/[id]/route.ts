@@ -7,6 +7,28 @@ import { getAdminClient } from '@/lib/api-auth';
 
 export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, auth) => {
   try {
+    const { data: investigationRef, error: investigationRefError } = await auth.supabase
+      .from('investigations')
+      .select('id, wire_id')
+      .eq('id', params.id)
+      .eq('company_id', auth.companyId)
+      .maybeSingle();
+    if (investigationRefError || !investigationRef) {
+      return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+    }
+    if (auth.role === ROLES.CFO && investigationRef.wire_id) {
+      const { data: visibleWire, error: visibilityError } = await auth.supabase
+        .from('wire_requests')
+        .select('id')
+        .eq('id', investigationRef.wire_id)
+        .eq('company_id', auth.companyId)
+        .lte('visible_after', new Date().toISOString())
+        .maybeSingle();
+      if (visibilityError || !visibleWire) {
+        return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+      }
+    }
+
     await verifyTenantResource(auth.supabase, 'investigations', params.id, auth.companyId);
     
     const { data: inv, error } = await auth.supabase
@@ -31,6 +53,28 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, 
 
 export const PUT = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params }, auth) => {
   try {
+    const { data: investigationRef, error: investigationRefError } = await auth.supabase
+      .from('investigations')
+      .select('id, wire_id')
+      .eq('id', params.id)
+      .eq('company_id', auth.companyId)
+      .maybeSingle();
+    if (investigationRefError || !investigationRef) {
+      return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+    }
+    if (auth.role === ROLES.CFO && investigationRef.wire_id) {
+      const { data: visibleWire, error: visibilityError } = await auth.supabase
+        .from('wire_requests')
+        .select('id')
+        .eq('id', investigationRef.wire_id)
+        .eq('company_id', auth.companyId)
+        .lte('visible_after', new Date().toISOString())
+        .maybeSingle();
+      if (visibilityError || !visibleWire) {
+        return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+      }
+    }
+
     await verifyTenantResource(auth.supabase, 'investigations', params.id, auth.companyId);
     const body = await req.json();
 

@@ -17,17 +17,30 @@ function escapeHtml(value: unknown): string {
 }
 
 export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
+  const needsQuarantineFilter = auth.role === ROLES.CFO || auth.role === ROLES.CONTROLLER;
+  if (needsQuarantineFilter) {
+    const { data: visibleWire, error: visibilityError } = await auth.supabase
+      .from('wire_requests')
+      .select('id')
+      .eq('id', params.id)
+      .eq('company_id', auth.companyId)
+      .lte('visible_after', new Date().toISOString())
+      .maybeSingle();
+    if (visibilityError || !visibleWire) return new NextResponse('Wire not found', { status: 404 });
+  }
+
   await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
 
-  const { data, error } = await auth.supabase
+  let wireQuery = auth.supabase
     .from('wire_requests')
     .select(`
       *,
       clerk:clerk_id (full_name, email),
       cfo:cfo_id (full_name, email)
     `)
-    .eq('id', params.id)
-    .single();
+    .eq('id', params.id);
+  if (needsQuarantineFilter) wireQuery = wireQuery.lte('visible_after', new Date().toISOString());
+  const { data, error } = await wireQuery.single();
 
   if (error || !data) return new NextResponse('Wire not found', { status: 404 });
 

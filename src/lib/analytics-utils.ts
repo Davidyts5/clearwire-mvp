@@ -1,6 +1,13 @@
 import { RiskFactors } from '@/lib/risk-engine';
 
-export async function getRiskTrendData(supabase: any, companyId: string, bucket: string, startDate: string, endDate: string) {
+export async function getRiskTrendData(
+  supabase: any,
+  companyId: string,
+  bucket: string,
+  startDate: string,
+  endDate: string,
+  visibleAfterOrBefore?: string,
+) {
   let offset = 0;
   const limit = 1000;
   const wires = [];
@@ -12,6 +19,7 @@ export async function getRiskTrendData(supabase: any, companyId: string, bucket:
       .eq('company_id', companyId)
       .gte('created_at', startDate)
       .lte('created_at', endDate);
+    if (visibleAfterOrBefore) query = query.lte('visible_after', visibleAfterOrBefore);
 
     const { data, error } = await query.order('created_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + limit - 1);
     if (error) throw error;
@@ -78,7 +86,13 @@ export async function getRiskTrendData(supabase: any, companyId: string, bucket:
   return { buckets: result, totals };
 }
 
-export async function getVendorLeaderboardData(supabase: any, companyId: string, startDate?: string, endDate?: string) {
+export async function getVendorLeaderboardData(
+  supabase: any,
+  companyId: string,
+  startDate?: string,
+  endDate?: string,
+  visibleAfterOrBefore?: string,
+) {
   let offset = 0;
   const limit = 1000;
   const wires = [];
@@ -91,6 +105,7 @@ export async function getVendorLeaderboardData(supabase: any, companyId: string,
 
     if (startDate) query = query.gte('created_at', startDate);
     if (endDate) query = query.lte('created_at', endDate);
+    if (visibleAfterOrBefore) query = query.lte('visible_after', visibleAfterOrBefore);
 
     const { data, error } = await query.order('created_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + limit - 1);
     if (error) throw error;

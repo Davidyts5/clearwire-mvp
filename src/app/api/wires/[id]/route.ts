@@ -7,10 +7,25 @@ import { appendAuditLog } from '@/lib/audit-chain';
 
 export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
   try {
-    await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+    const needsQuarantineFilter = auth.role === ROLES.CFO || auth.role === ROLES.CONTROLLER;
+    if (needsQuarantineFilter) {
+      const { data: visibleWire, error: visibilityError } = await auth.supabase
+        .from('wire_requests')
+        .select('id')
+        .eq('id', params.id)
+        .eq('company_id', auth.companyId)
+        .lte('visible_after', new Date().toISOString())
+        .maybeSingle();
+      if (visibilityError || !visibleWire) {
+        return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+      }
+    } else {
+      await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
+    }
 
     let query = auth.supabase.from('wire_requests').select('*').eq('id', params.id);
     if (auth.role === ROLES.CLERK) query = query.eq('clerk_id', auth.userId);
+    if (needsQuarantineFilter) query = query.lte('visible_after', new Date().toISOString());
     
     const { data, error } = await query.single();
     if (error || !data) return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
@@ -43,10 +58,30 @@ export const GET = withAuth([...ROLE_VALUES], async (req, { params }, auth) => {
 
 export const POST = withAuth([ROLES.CONTROLLER, ROLES.CFO], async (req, { params }, auth) => {
   try {
+    const { data: visibleWire, error: visibilityError } = await auth.supabase
+      .from('wire_requests')
+      .select('id')
+      .eq('id', params.id)
+      .eq('company_id', auth.companyId)
+      .lte('visible_after', new Date().toISOString())
+      .maybeSingle();
+    if (visibilityError || !visibleWire) {
+      return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+    }
+
     await verifyTenantResource(auth.supabase, 'wire_requests', params.id, auth.companyId);
     await verifySegregationOfDuties(auth.supabase, params.id, auth.userId);
 
-    const { data: wireData } = await auth.supabase.from('wire_requests').select('amount, status').eq('id', params.id).single();
+    const { data: wireData, error: wireError } = await auth.supabase
+      .from('wire_requests')
+      .select('amount, status')
+      .eq('id', params.id)
+      .eq('company_id', auth.companyId)
+      .lte('visible_after', new Date().toISOString())
+      .maybeSingle();
+    if (wireError || !wireData) {
+      return NextResponse.json({ error: 'Wire not found or access denied' }, { status: 404 });
+    }
     
     if (auth.role === ROLES.CONTROLLER) {
       const { data: userData } = await auth.supabase.from('users').select('approval_limit, can_unfreeze').eq('id', auth.userId).single();

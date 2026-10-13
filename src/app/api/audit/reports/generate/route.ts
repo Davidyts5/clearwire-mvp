@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { withAuth, getAdminClient } from '@/lib/api-auth';
 import { ROLES } from '@/lib/roles';
+import { getVisibleWireIds } from '@/lib/inbound-quarantine';
 import { getRiskTrendData, getVendorLeaderboardData } from '@/lib/analytics-utils';
 import { verifyCompanyChain, canonicalJSON, appendAuditLog } from '@/lib/audit-chain';
 import crypto from 'crypto';
@@ -46,26 +47,35 @@ export const POST = withAuth([ROLES.AUDITOR, ROLES.CFO], async (req, { params },
     const companyName = comp?.name || 'Unknown Company';
     const generatedBy = user?.full_name || 'Unknown Auditor';
 
-    // 2. Fetch Data
-    const riskData = await getRiskTrendData(auth.supabase, auth.companyId, 'day', startDate, endDate);
-    const vendorData = await getVendorLeaderboardData(auth.supabase, auth.companyId, startDate, endDate);
-    
+    // 2. Fetch Data. CFO views exclude wires that are not yet released from quarantine.
+    const quarantineCutoff = new Date().toISOString();
+    const visibleAfterOrBefore = auth.role === ROLES.CFO ? quarantineCutoff : undefined;
+    const riskData = await getRiskTrendData(auth.supabase, auth.companyId, 'day', startDate, endDate, visibleAfterOrBefore);
+    const vendorData = await getVendorLeaderboardData(auth.supabase, auth.companyId, startDate, endDate, visibleAfterOrBefore);
+
+    const visibleWireIds = auth.role === ROLES.CFO
+      ? await getVisibleWireIds(auth.supabase, auth.companyId, quarantineCutoff)
+      : null;
+
     let offset = 0;
     const cases = [];
     while (true) {
-      let q = auth.supabase.from('investigations')
-        .select('case_number, status, resolved_at, resolution_notes, vendors(name), wire_requests(vendor_name_snapshot)')
+      const q = auth.supabase.from('investigations')
+        .select('wire_id, case_number, status, resolved_at, resolution_notes, vendors(name), wire_requests(vendor_name_snapshot)')
         .eq('company_id', auth.companyId)
         .gte('created_at', startDate)
         .lte('created_at', endDate);
       const { data, error } = await q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + 999);
       if (error) throw error;
-      cases.push(...data);
+      cases.push(...(data || []).filter((investigation: any) =>
+        !visibleWireIds || !investigation.wire_id || visibleWireIds.has(investigation.wire_id)
+      ));
       if (data.length < 1000) break;
       offset += 1000;
     }
 
-    const chainData = await verifyCompanyChain(auth.supabase, auth.companyId, startDate, endDate);
+    // WORM verification must see the complete company chain, including quarantined events.
+    const chainData = await verifyCompanyChain(adminClient, auth.companyId, startDate, endDate);
 
     // 3. Compute Hash
     const reportData = {
