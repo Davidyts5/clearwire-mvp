@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Activity,
   Building2,
@@ -13,6 +13,7 @@ import {
   Shield,
   Users,
   Wallet,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import Decimal from 'decimal.js';
@@ -22,6 +23,36 @@ export type GodModeCompany = {
   name: string;
   is_frozen: boolean | null;
   inbound_delay_minutes: number | null;
+};
+
+type DrillDownDevice = {
+  id: string;
+  user_id: string;
+  device_name: string | null;
+  browser: string | null;
+  os: string | null;
+  form_factor: string | null;
+  created_at: string | null;
+  last_used_at: string | null;
+};
+
+type DrillDownUser = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+  deviceId: string | null;
+  user_authenticators: DrillDownDevice[];
+};
+
+type DrillDownData = {
+  company: GodModeCompany;
+  stats: {
+    totalWireVolumeUsd: string;
+    totalWires: number;
+    frozenWires: number;
+  };
+  users: DrillDownUser[];
 };
 
 type GodModeClientProps = {
@@ -96,6 +127,17 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
   const [wireStateSaveBusy, setWireStateSaveBusy] = useState(false);
   const [wireStateError, setWireStateError] = useState<string | null>(null);
   const [wireStateMessage, setWireStateMessage] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<GodModeCompany[]>(companies);
+  const [selectedWorkspace, setSelectedWorkspace] = useState<GodModeCompany | null>(null);
+  const [drillData, setDrillData] = useState<DrillDownData | null>(null);
+  const [drillLoading, setDrillLoading] = useState(false);
+  const [drillError, setDrillError] = useState<string | null>(null);
+  const [delayMinutes, setDelayMinutes] = useState('');
+  const [delaySaving, setDelaySaving] = useState(false);
+  const [delayMessage, setDelayMessage] = useState<string | null>(null);
+  const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
+  const [userMessage, setUserMessage] = useState<string | null>(null);
+  const [userError, setUserError] = useState<string | null>(null);
   const toggleGhostMode = () => setGhostMode((current) => !current);
   const formattedVolume = formatUsd(telemetry.totalWireVolumeUsd);
 
@@ -271,6 +313,127 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
       setWireStateSaveBusy(false);
     }
   };
+
+  const fetchDrillDown = async (company: GodModeCompany) => {
+    setDrillLoading(true);
+    setDrillError(null);
+    setDrillData(null);
+    setDelayMessage(null);
+    setUserMessage(null);
+    setUserError(null);
+    try {
+      const response = await fetch(`/api/god-mode/workspaces/${encodeURIComponent(company.id)}`, { method: 'GET', cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok || !result.success || !result.data) {
+        throw new Error(result.error || 'Workspace drill-down failed.');
+      }
+      setDrillData(result.data as DrillDownData);
+      if (result.data.company?.inbound_delay_minutes !== null && result.data.company?.inbound_delay_minutes !== undefined) {
+        setDelayMinutes(String(result.data.company.inbound_delay_minutes));
+      }
+    } catch (error) {
+      setDrillError(error instanceof Error ? error.message : 'Workspace drill-down failed.');
+    } finally {
+      setDrillLoading(false);
+    }
+  };
+
+  const openDrillDown = (company: GodModeCompany) => {
+    setSelectedWorkspace(company);
+    setDelayMinutes(company.inbound_delay_minutes === null ? '' : String(company.inbound_delay_minutes));
+    void fetchDrillDown(company);
+  };
+
+  const closeDrillDown = () => {
+    setSelectedWorkspace(null);
+    setDrillData(null);
+    setDrillError(null);
+    setDelayMessage(null);
+    setUserMessage(null);
+    setUserError(null);
+  };
+
+  const saveDelay = async () => {
+    if (!selectedWorkspace) return;
+    const parsed = Number(delayMinutes);
+    if (delayMinutes.trim() === '' || !Number.isInteger(parsed) || parsed < 0 || parsed > 525600) {
+      setDelayMessage(null);
+      setDrillError('Enter a whole number of minutes between 0 and 525600.');
+      return;
+    }
+    setDelaySaving(true);
+    setDelayMessage(null);
+    setDrillError(null);
+    try {
+      const response = await fetch(`/api/god-mode/workspaces/${encodeURIComponent(selectedWorkspace.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inbound_delay_minutes: parsed, ghostMode }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Delay update failed.');
+      }
+      setWorkspaces((current) => current.map((company) => (
+        company.id === selectedWorkspace.id ? { ...company, inbound_delay_minutes: parsed } : company
+      )));
+      setSelectedWorkspace((current) => (current ? { ...current, inbound_delay_minutes: parsed } : current));
+      setDrillData((current) => (current ? { ...current, company: { ...current.company, inbound_delay_minutes: parsed } } : current));
+      setDelayMessage(
+        `Inbound delay saved (${countFormatter.format(parsed)} min) and recorded in the WORM audit chain.${result.message ? ` ${result.message}` : ''}`,
+      );
+    } catch (error) {
+      setDrillError(error instanceof Error ? error.message : 'Delay update failed.');
+    } finally {
+      setDelaySaving(false);
+    }
+  };
+
+  const revokeDevice = async (user: DrillDownUser, device: DrillDownDevice) => {
+    if (!selectedWorkspace) return;
+    setRevokingDeviceId(device.id);
+    setUserMessage(null);
+    setUserError(null);
+    try {
+      const response = await fetch(`/api/god-mode/users/${encodeURIComponent(user.id)}/revoke-device`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: device.id, companyId: selectedWorkspace.id, ghostMode }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Device revocation failed.');
+      }
+      setDrillData((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          users: current.users.map((candidate) => {
+            if (candidate.id !== user.id) return candidate;
+            const remaining = candidate.user_authenticators.filter((authenticator) => authenticator.id !== device.id);
+            return { ...candidate, user_authenticators: remaining, deviceId: remaining[0]?.id ?? null };
+          }),
+        };
+      });
+      setUserMessage(
+        `Device revoked for ${user.full_name || user.email || user.id} and recorded in the WORM audit chain.${result.message ? ` ${result.message}` : ''}`,
+      );
+    } catch (error) {
+      setUserError(error instanceof Error ? error.message : 'Device revocation failed.');
+    } finally {
+      setRevokingDeviceId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedWorkspace) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeDrillDown();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWorkspace?.id]);
 
   const supportInputClassName = 'w-full rounded-lg border border-emerald-500/20 bg-black/40 px-3 py-2.5 font-mono text-sm text-emerald-100 placeholder:text-emerald-500/30 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20';
   const supportLabelClassName = 'mb-1.5 block font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-500/65';
@@ -612,7 +775,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                 </div>
                 <h2 id="workspace-table-title" className="mt-2 text-lg font-semibold text-emerald-100">Company Workspaces</h2>
                 <p className="mt-1 text-xs leading-5 text-emerald-500/60">
-                  All workspace records are shown. The current schema has no separate active or archived status; freeze state is shown independently.
+                  All workspace records are shown. Click a workspace row to open its drill-down: company stats, inbound quarantine delay, and user device management. Freeze state is shown independently.
                 </p>
               </div>
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 font-mono text-[11px] text-emerald-300">
@@ -632,8 +795,21 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-emerald-500/10">
-                  {companies.map((company) => (
-                    <tr key={company.id} className="transition-colors hover:bg-emerald-500/[0.035]">
+                  {workspaces.map((company) => (
+                    <tr
+                      key={company.id}
+                      onClick={() => openDrillDown(company)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openDrillDown(company);
+                        }
+                      }}
+                      tabIndex={0}
+                      title={`Open drill-down for ${company.name}`}
+                      aria-label={`Open drill-down for ${company.name}`}
+                      className="cursor-pointer transition-colors hover:bg-emerald-500/[0.035] focus-visible:bg-emerald-500/[0.06] focus-visible:outline-none"
+                    >
                       <td className="px-5 py-4">
                         <p className="font-medium text-emerald-100">{company.name}</p>
                         <p className="mt-1 font-mono text-[10px] text-emerald-500/45">{company.id}</p>
@@ -672,6 +848,146 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
               </table>
             </div>
           </section>
+
+          {selectedWorkspace && (
+            <div className="fixed inset-0 z-[300] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="drill-down-title">
+              <button type="button" aria-label="Close drill-down" onClick={closeDrillDown} className="absolute inset-0 h-full w-full cursor-default" />
+              <div className="relative my-auto w-full max-w-3xl rounded-2xl border border-emerald-500/25 bg-[#0d120d] shadow-[0_24px_80px_-24px_rgba(16,185,129,0.45)]">
+                <div className="flex items-start justify-between gap-4 border-b border-emerald-500/15 px-5 py-4">
+                  <div>
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-500/55">Workspace drill-down</p>
+                    <h2 id="drill-down-title" className="mt-1 text-lg font-semibold text-emerald-100">{selectedWorkspace.name}</h2>
+                    <p className="mt-1 break-all font-mono text-[11px] text-emerald-500/50">{selectedWorkspace.id}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeDrillDown}
+                    aria-label="Close drill-down"
+                    className="rounded-lg border border-emerald-500/25 bg-black/40 p-2 text-emerald-300 transition-colors hover:bg-emerald-500/15"
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div className="max-h-[75vh] space-y-5 overflow-y-auto px-5 py-5">
+                  <p className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs leading-5 text-emerald-100/75">
+                    Support actions in this drill-down are always recorded in the WORM ledger. Ghost Mode is a request marker only — it never suppresses audit logging for delay changes or device revocations.
+                  </p>
+
+                  {drillLoading && <p role="status" className="text-sm text-emerald-200">Loading workspace details…</p>}
+                  {drillError && <p role="alert" className="rounded-lg border border-red-500/25 bg-red-950/20 px-3 py-2 text-sm text-red-200">{drillError}</p>}
+
+                  <section aria-labelledby="drill-stats-title">
+                    <h3 id="drill-stats-title" className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/60">Company Stats</h3>
+                    {drillData ? (
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-emerald-500/20 bg-black/30 p-4">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-500/60">Wire Volume</p>
+                          <p className="mt-2 font-mono text-xl font-semibold text-emerald-200">{formatUsd(drillData.stats.totalWireVolumeUsd)}</p>
+                          <p className="mt-1 text-[11px] text-emerald-500/50">{countFormatter.format(drillData.stats.totalWires)} wires</p>
+                        </div>
+                        <div className="rounded-xl border border-emerald-500/20 bg-black/30 p-4">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-500/60">Frozen Wires</p>
+                          <p className="mt-2 font-mono text-xl font-semibold text-emerald-200">{countFormatter.format(drillData.stats.frozenWires)}</p>
+                          <p className="mt-1 text-[11px] text-emerald-500/50">status = frozen</p>
+                        </div>
+                        <div className="rounded-xl border border-emerald-500/20 bg-black/30 p-4">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-500/60">Users</p>
+                          <p className="mt-2 font-mono text-xl font-semibold text-emerald-200">{countFormatter.format(drillData.users.length)}</p>
+                          <p className="mt-1 text-[11px] text-emerald-500/50">in this workspace</p>
+                        </div>
+                      </div>
+                    ) : (
+                      !drillLoading && <p className="mt-2 text-sm text-emerald-500/55">Stats unavailable until the drill-down loads.</p>
+                    )}
+                  </section>
+
+                  <section className="border-t border-emerald-500/10 pt-5" aria-labelledby="drill-delay-title">
+                    <h3 id="drill-delay-title" className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/60">Quarantine Delay</h3>
+                    <p className="mt-2 text-sm leading-6 text-emerald-100/70">
+                      Inbound wires for this workspace stay hidden from approvers for this many minutes after creation. Saving is WORM-logged as{' '}
+                      <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">WORKSPACE_DELAY_UPDATED</code>.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                      <label className="block">
+                        <span className={supportLabelClassName}>Inbound delay (minutes)</span>
+                        <input
+                          value={delayMinutes}
+                          onChange={(event) => setDelayMinutes(event.target.value)}
+                          type="number"
+                          min={0}
+                          max={525600}
+                          step={1}
+                          inputMode="numeric"
+                          placeholder="e.g. 30"
+                          className={supportInputClassName}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => void saveDelay()}
+                        disabled={delaySaving || drillLoading}
+                        className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {delaySaving ? 'Saving…' : 'Save Delay'}
+                      </button>
+                    </div>
+                    {delayMessage && <p role="status" className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-100">{delayMessage}</p>}
+                  </section>
+
+                  <section className="border-t border-emerald-500/10 pt-5" aria-labelledby="drill-users-title">
+                    <h3 id="drill-users-title" className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/60">User Management</h3>
+                    {userMessage && <p role="status" className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-100">{userMessage}</p>}
+                    {userError && <p role="alert" className="mt-3 rounded-lg border border-red-500/25 bg-red-950/20 px-3 py-2 text-sm text-red-200">{userError}</p>}
+                    {drillData ? (
+                      <ul className="mt-3 divide-y divide-emerald-500/10 rounded-xl border border-emerald-500/15 bg-black/20">
+                        {drillData.users.map((user) => (
+                          <li key={user.id} className="px-4 py-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="font-medium text-emerald-100">{user.full_name || 'Unnamed user'}</p>
+                                <p className="mt-0.5 break-all text-xs text-emerald-500/60">{user.email || 'No email'} · {user.role || 'no role'}</p>
+                                <p className="mt-0.5 break-all font-mono text-[10px] text-emerald-500/40">{user.id}</p>
+                              </div>
+                            </div>
+                            {user.user_authenticators.length > 0 ? (
+                              <ul className="mt-3 space-y-2">
+                                {user.user_authenticators.map((device) => (
+                                  <li key={device.id} className="flex flex-col gap-2 rounded-lg border border-emerald-500/10 bg-black/30 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                      <p className="text-xs font-medium text-emerald-200">{device.device_name || device.form_factor || 'Registered device'}</p>
+                                      <p className="mt-0.5 text-[11px] text-emerald-500/55">
+                                        {[device.browser, device.os].filter(Boolean).join(' · ') || 'Device details unavailable'} · <span className="font-mono">{device.id}</span>
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => void revokeDevice(user, device)}
+                                      disabled={revokingDeviceId === device.id}
+                                      className="shrink-0 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {revokingDeviceId === device.id ? 'Revoking…' : 'Revoke Device'}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-2 text-xs text-emerald-500/50">No registered device.</p>
+                            )}
+                          </li>
+                        ))}
+                        {drillData.users.length === 0 && (
+                          <li className="px-4 py-8 text-center text-sm text-emerald-500/55">No users in this workspace.</li>
+                        )}
+                      </ul>
+                    ) : (
+                      !drillLoading && <p className="mt-2 text-sm text-emerald-500/55">Users unavailable until the drill-down loads.</p>
+                    )}
+                  </section>
+                </div>
+              </div>
+            </div>
+          )}
 
           <footer className="flex flex-col gap-2 border-t border-emerald-500/10 pt-4 font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-500/40 sm:flex-row sm:items-center sm:justify-between">
             <span>Restricted system · allowlisted super-admin access</span>
