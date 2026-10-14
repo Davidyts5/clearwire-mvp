@@ -27,7 +27,7 @@ export default function AnalyticsPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-20">
       <div>
         <div className="flex items-center gap-2 text-blue-600 mb-2 font-bold uppercase tracking-wider text-xs">
-          <BarChart3 size={16} /> Auditor Dashboard
+          <BarChart3 size={16} /> Compliance Hub
         </div>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Risk Analytics</h1>
         <p className="text-slate-500 mt-1">Review systemic trends, high-risk vendors, and approver velocity.</p>

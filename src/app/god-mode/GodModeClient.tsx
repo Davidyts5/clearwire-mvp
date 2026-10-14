@@ -154,7 +154,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
     setInvoiceStatus(null);
     setInvoiceUrl(null);
     try {
-      const response = await fetch(invoiceEndpoint(), { method: 'GET', cache: 'no-store' });
+      const response = await fetch(`${invoiceEndpoint()}?ghostMode=${ghostMode}`, { method: 'GET', cache: 'no-store' });
       const result = await response.json();
       if (!response.ok || !result.success || !result.data?.signedUrl) {
         throw new Error(result.error || 'Invoice inspection failed.');
@@ -184,7 +184,8 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
     try {
       const body = new FormData();
       body.append('invoice', invoiceFile);
-      const response = await fetch(invoiceEndpoint(), { method: 'POST', body });
+      body.append('ghostMode', String(ghostMode));
+      const response = await fetch(`${invoiceEndpoint()}?ghostMode=${ghostMode}`, { method: 'POST', body });
       const result = await response.json();
       if (!response.ok || !result.success) {
         throw new Error(result.error || 'Invoice replacement failed.');
@@ -209,7 +210,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
     setVendorStatus(null);
     setVendorLoaded(false);
     try {
-      const response = await fetch(`/api/god-mode/vendors/${encodeURIComponent(vendorId.trim())}`, { method: 'GET', cache: 'no-store' });
+      const response = await fetch(`/api/god-mode/vendors/${encodeURIComponent(vendorId.trim())}?ghostMode=${ghostMode}`, { method: 'GET', cache: 'no-store' });
       const result = await response.json();
       if (!response.ok || !result.success || !result.data) {
         throw new Error(result.error || 'Vendor lookup failed.');
@@ -219,7 +220,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
       setVendorAccountNumber(result.data.account_number || '');
       setVendorSwiftBic(result.data.swift_bic || '');
       setVendorLoaded(true);
-      setVendorStatus('Vendor loaded. Review the current details, edit them, then save — the old and new values are recorded in the WORM audit chain.');
+      setVendorStatus(`Vendor loaded. Review the current details, edit them, then save. ${result.auditLogged ? 'Inspection recorded in the WORM ledger.' : 'Ghost Mode active. Inspection was not logged.'}`);
     } catch (error) {
       setVendorError(error instanceof Error ? error.message : 'Vendor lookup failed.');
     } finally {
@@ -244,6 +245,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
           account_number: vendorAccountNumber,
           swift_bic: vendorSwiftBic,
           company_id: vendorCompanyId,
+          ghostMode,
         }),
       });
       const result = await response.json();
@@ -268,14 +270,14 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
     setWireStateMessage(null);
     setWireCurrentStatus(null);
     try {
-      const response = await fetch(`/api/god-mode/wires/${encodeURIComponent(wireStateId.trim())}/state`, { method: 'GET', cache: 'no-store' });
+      const response = await fetch(`/api/god-mode/wires/${encodeURIComponent(wireStateId.trim())}/state?ghostMode=${ghostMode}`, { method: 'GET', cache: 'no-store' });
       const result = await response.json();
       if (!response.ok || !result.success || !result.data) {
         throw new Error(result.error || 'Wire lookup failed.');
       }
       setWireStateCompanyId(result.data.company_id || '');
       setWireCurrentStatus(result.data.status || null);
-      setWireStateMessage(`Current status: ${result.data.status}. Choose the forced status below — the previous and new statuses are recorded in the WORM audit chain.`);
+      setWireStateMessage(`Current status: ${result.data.status}. Choose the forced status below. ${result.auditLogged ? 'Inspection recorded in the WORM ledger.' : 'Ghost Mode active. Inspection was not logged.'}`);
     } catch (error) {
       setWireStateError(error instanceof Error ? error.message : 'Wire lookup failed.');
     } finally {
@@ -295,7 +297,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
       const response = await fetch(`/api/god-mode/wires/${encodeURIComponent(wireStateId.trim())}/state`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: wireStateStatus, company_id: wireStateCompanyId }),
+        body: JSON.stringify({ status: wireStateStatus, company_id: wireStateCompanyId, ghostMode }),
       });
       const result = await response.json();
       if (!response.ok || !result.success) {
@@ -322,7 +324,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
     setUserMessage(null);
     setUserError(null);
     try {
-      const response = await fetch(`/api/god-mode/workspaces/${encodeURIComponent(company.id)}`, { method: 'GET', cache: 'no-store' });
+      const response = await fetch(`/api/god-mode/workspaces/${encodeURIComponent(company.id)}?ghostMode=${ghostMode}`, { method: 'GET', cache: 'no-store' });
       const result = await response.json();
       if (!response.ok || !result.success || !result.data) {
         throw new Error(result.error || 'Workspace drill-down failed.');
@@ -380,7 +382,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
       setSelectedWorkspace((current) => (current ? { ...current, inbound_delay_minutes: parsed } : current));
       setDrillData((current) => (current ? { ...current, company: { ...current.company, inbound_delay_minutes: parsed } } : current));
       setDelayMessage(
-        `Inbound delay saved (${countFormatter.format(parsed)} min) and recorded in the WORM audit chain.${result.message ? ` ${result.message}` : ''}`,
+        `Inbound delay saved (${countFormatter.format(parsed)} min). ${result.auditLogged ? 'Recorded in the WORM audit chain.' : 'WORM ledger was bypassed.'}${result.message ? ` ${result.message}` : ''}`,
       );
     } catch (error) {
       setDrillError(error instanceof Error ? error.message : 'Delay update failed.');
@@ -416,7 +418,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
         };
       });
       setUserMessage(
-        `Device revoked for ${user.full_name || user.email || user.id} and recorded in the WORM audit chain.${result.message ? ` ${result.message}` : ''}`,
+        `Device revoked for ${user.full_name || user.email || user.id}. ${result.auditLogged ? 'Recorded in the WORM audit chain.' : 'WORM ledger was bypassed.'}${result.message ? ` ${result.message}` : ''}`,
       );
     } catch (error) {
       setUserError(error instanceof Error ? error.message : 'Device revocation failed.');
@@ -456,13 +458,13 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
             <div className="flex items-center justify-between gap-4 rounded-xl border border-emerald-500/20 bg-[#101410] px-4 py-3 sm:justify-start">
               <div>
                 <p className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-emerald-200">Ghost Mode</p>
-                <p className="mt-1 text-[11px] text-emerald-500/60">Display-only switch · never disables WORM logging</p>
+                <p className="mt-1 text-[11px] text-emerald-500/60">Stealth switch · completely disables WORM logging for actions</p>
               </div>
               <button
                 type="button"
                 role="switch"
                 aria-checked={ghostMode}
-                aria-label={`Ghost Mode ${ghostMode ? 'on' : 'off'} (display-only; audit logging remains enabled)`}
+                aria-label={`Ghost Mode ${ghostMode ? 'on' : 'off'}`}
                 onClick={toggleGhostMode}
                 className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] ${ghostMode ? 'border-amber-400/60 bg-amber-500/20' : 'border-emerald-500/30 bg-emerald-950/80'}`}
               >
@@ -502,12 +504,10 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                   Ghost Mode {ghostMode ? 'ON' : 'OFF'} · audit policy
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-emerald-100/80">
-                  Ghost Mode is a request marker, not an audit bypass. ClearWire Security records Super Admin interventions as{' '}
-                  <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">SYSTEM_SUPPORT_INTERVENTION</code>{' '}
-                  in the WORM ledger even when Ghost Mode is requested.
+                  {ghostMode ? 'True Stealth Active: System interventions will bypass the WORM ledger entirely. Customers will not see these actions in their workspace history.' : 'Ghost Mode is off. Support actions are recorded in the WORM ledger.'}
                 </p>
                 <p className="mt-2 text-xs leading-5 text-amber-200/80">
-                  This switch currently changes only its on-screen state; the dashboard has no support action controls connected to it. The support APIs independently enforce WORM logging and return an audit confirmation.
+                  Caution: Enable Ghost Mode only for concierge onboarding to correct clear errors. When enabled, WORM logs are bypassed.
                 </p>
               </div>
             </div>
@@ -521,7 +521,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
               </div>
               <h2 id="invoice-inspection-title" className="mt-2 text-lg font-semibold text-emerald-100">Invoice Inspection &amp; Replacement</h2>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-emerald-100/70">
-                Inspect an invoice by wire ID or replace the stored file without changing the wire&apos;s invoice path. Replacement attempts and completion are WORM-logged, and the prior file is retained in restricted support storage.
+                Inspect an invoice by wire ID or replace the stored file without changing the wire&apos;s invoice path. Unless Ghost Mode is active, replacement attempts and completion are WORM-logged, and the prior file is retained in restricted support storage.
               </p>
             </div>
 
@@ -571,7 +571,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                 disabled={replacementBusy || invoiceBusy || !invoiceWireId.trim() || !invoiceFile}
                 className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {replacementBusy ? 'Replacing…' : 'Replace & Audit'}
+                {replacementBusy ? 'Replacing…' : ghostMode ? 'Replace (Ghost Mode)' : 'Replace & Audit'}
               </button>
             </div>
 
@@ -604,9 +604,9 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
               </div>
               <h2 id="vendor-editing-title" className="mt-2 text-lg font-semibold text-emerald-100">Edit Vendor Details</h2>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-emerald-100/70">
-                Fetch a vendor by ID, review its current bank details, and save corrections. Every edit is written to the WORM ledger as{' '}
+                Fetch a vendor by ID, review its current bank details, and save corrections. Unless Ghost Mode is active, edits are written to the WORM ledger as{' '}
                 <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">VENDOR_MODIFIED_BY_SUPPORT</code>{' '}
-                with the old and new values. Ghost Mode does not suppress this logging.
+                with the old and new values.
               </p>
             </div>
 
@@ -663,7 +663,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                   disabled={vendorSaveBusy || vendorBusy || !vendorName.trim() || !vendorAccountNumber.trim()}
                   className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {vendorSaveBusy ? 'Saving…' : 'Save Vendor & Audit'}
+                  {vendorSaveBusy ? 'Saving…' : ghostMode ? 'Save Vendor (Ghost Mode)' : 'Save Vendor & Audit'}
                 </button>
               </div>
             )}
@@ -680,9 +680,9 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
               </div>
               <h2 id="wire-state-title" className="mt-2 text-lg font-semibold text-emerald-100">Wire State Override — Force Push</h2>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-emerald-100/70">
-                Force a wire into a new status. Every override is written to the WORM ledger as{' '}
+                Force a wire into a new status. Unless Ghost Mode is active, overrides are written to the WORM ledger as{' '}
                 <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">WIRE_STATE_FORCED_BY_SUPPORT</code>{' '}
-                with the previous and new statuses. Ghost Mode does not suppress this logging.
+                with the previous and new statuses.
               </p>
             </div>
 
@@ -740,6 +740,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                   <option value="approved">approved</option>
                   <option value="rejected">rejected</option>
                   <option value="frozen">frozen</option>
+                  <option value="denied">denied</option>
                 </select>
               </label>
             </div>
@@ -750,7 +751,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
               disabled={wireStateSaveBusy || wireStateBusy || !wireStateId.trim() || !wireStateCompanyId.trim()}
               className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {wireStateSaveBusy ? 'Forcing…' : 'Force Wire State & Audit'}
+              {wireStateSaveBusy ? 'Forcing…' : ghostMode ? 'Force Wire State (Ghost Mode)' : 'Force Wire State & Audit'}
             </button>
 
             {wireStateError && <p role="alert" className="rounded-lg border border-red-500/25 bg-red-950/20 px-3 py-2 text-sm text-red-200">{wireStateError}</p>}
@@ -871,7 +872,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
 
                 <div className="max-h-[75vh] space-y-5 overflow-y-auto px-5 py-5">
                   <p className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs leading-5 text-emerald-100/75">
-                    Support actions in this drill-down are always recorded in the WORM ledger. Ghost Mode is a request marker only — it never suppresses audit logging for delay changes or device revocations.
+                    {ghostMode ? 'True Stealth Active: Actions executed in this drill-down will bypass the WORM ledger.' : 'Actions in this drill-down are recorded in the WORM ledger.'}
                   </p>
 
                   {drillLoading && <p role="status" className="text-sm text-emerald-200">Loading workspace details…</p>}
@@ -905,7 +906,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
                   <section className="border-t border-emerald-500/10 pt-5" aria-labelledby="drill-delay-title">
                     <h3 id="drill-delay-title" className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/60">Quarantine Delay</h3>
                     <p className="mt-2 text-sm leading-6 text-emerald-100/70">
-                      Inbound wires for this workspace stay hidden from approvers for this many minutes after creation. Saving is WORM-logged as{' '}
+                      Inbound wires for this workspace stay hidden from approvers for this many minutes after creation. Unless Ghost Mode is active, saving is WORM-logged as{' '}
                       <code className="rounded border border-emerald-500/20 bg-black/40 px-1.5 py-0.5 font-mono text-emerald-300">WORKSPACE_DELAY_UPDATED</code>.
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
@@ -991,7 +992,7 @@ export default function GodModeClient({ telemetry, companies, migrationPending }
 
           <footer className="flex flex-col gap-2 border-t border-emerald-500/10 pt-4 font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-500/40 sm:flex-row sm:items-center sm:justify-between">
             <span>Restricted system · allowlisted super-admin access</span>
-            <span>Dashboard controls are read-only · support actions are API-gated and audited</span>
+            <span>{ghostMode ? 'Support actions are API-gated · Ghost Mode bypasses WORM logging' : 'Support actions are API-gated and audited'}</span>
           </footer>
         </main>
       </div>

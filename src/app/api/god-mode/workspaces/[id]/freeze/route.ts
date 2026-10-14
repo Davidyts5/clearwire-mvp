@@ -43,24 +43,25 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const previousState = company.is_frozen;
     const changed = previousState !== body.freeze;
 
-    // WORM is deliberately written even when Ghost Mode is requested. This is a
-    // write-ahead intervention record, so a successful state change is never unlogged.
-    await appendAuditLog(adminClient, {
-      companyId: params.id,
-      wireId: null,
-      actorId,
-      action: 'SYSTEM_SUPPORT_INTERVENTION',
-      eventPayload: {
-        type: 'WORKSPACE_FREEZE_TOGGLED',
-        workspace_id: params.id,
-        previous_is_frozen: previousState,
-        freeze: body.freeze,
-        requested_is_frozen: body.freeze,
-        operation_status: changed ? 'requested' : 'no_change',
-        ghost_mode_requested: body.ghostMode,
-        actor_email: identity.email,
-      },
-    });
+    // Record the intervention before mutation unless Ghost Mode is active.
+    if (!body.ghostMode) {
+      await appendAuditLog(adminClient, {
+        companyId: params.id,
+        wireId: null,
+        actorId,
+        action: 'SYSTEM_SUPPORT_INTERVENTION',
+        eventPayload: {
+          type: 'WORKSPACE_FREEZE_TOGGLED',
+          workspace_id: params.id,
+          previous_is_frozen: previousState,
+          freeze: body.freeze,
+          requested_is_frozen: body.freeze,
+          operation_status: changed ? 'requested' : 'no_change',
+          ghost_mode_requested: body.ghostMode,
+          actor_email: identity.email,
+        },
+      });
+    }
 
     if (changed) {
       let update = adminClient
@@ -77,20 +78,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
       if (updateError || !updatedCompany) {
         try {
-          await appendAuditLog(adminClient, {
-            companyId: params.id,
-            wireId: null,
-            actorId,
-            action: 'SYSTEM_SUPPORT_INTERVENTION',
-            eventPayload: {
-              type: 'WORKSPACE_FREEZE_TOGGLE_FAILED',
-              workspace_id: params.id,
-              requested_is_frozen: body.freeze,
-              failure_code: updateError?.code ?? 'CONCURRENT_CHANGE',
-              ghost_mode_requested: body.ghostMode,
-              actor_email: identity.email,
-            },
-          });
+          if (!body.ghostMode) {
+            await appendAuditLog(adminClient, {
+              companyId: params.id,
+              wireId: null,
+              actorId,
+              action: 'SYSTEM_SUPPORT_INTERVENTION',
+              eventPayload: {
+                type: 'WORKSPACE_FREEZE_TOGGLE_FAILED',
+                workspace_id: params.id,
+                requested_is_frozen: body.freeze,
+                failure_code: updateError?.code ?? 'CONCURRENT_CHANGE',
+                ghost_mode_requested: body.ghostMode,
+                actor_email: identity.email,
+              },
+            });
+          }
         } catch (failureAuditError) {
           console.error('Failed to append God Mode freeze failure record.', failureAuditError);
         }
@@ -109,10 +112,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({
       success: true,
       data: { id: params.id, is_frozen: body.freeze },
-      auditLogged: true,
+      auditLogged: !body.ghostMode,
       ghostModeRequested: body.ghostMode,
-      ghostModeSuppressed: false,
-      message: body.ghostMode ? 'Ghost Mode does not suppress WORM audit logging.' : undefined,
+      ghostModeSuppressed: body.ghostMode,
+      message: body.ghostMode ? 'Ghost Mode active. WORM ledger was bypassed.' : undefined,
     });
   } catch (error) {
     console.error('God Mode workspace freeze request failed.', error);

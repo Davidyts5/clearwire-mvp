@@ -72,7 +72,7 @@ export default function Sidebar() {
       ) : (
         navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+          const isActive = pathname === item.href || (item.href !== '/dashboard' && item.href !== '/auditor-dashboard' && pathname.startsWith(item.href + '/'));
           
           return (
             <Link 

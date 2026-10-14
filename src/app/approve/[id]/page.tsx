@@ -195,7 +195,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Transfer Declined</h2>
         <div className="bg-red-50 p-4 rounded-lg text-sm text-red-800 text-left mb-6 border border-red-100">
           <p className="font-bold mb-1">Reason: {wireDetails?.rejection_reason || 'Declined'}</p>
-          {wireDetails?.rejection_notes && <p className="italic text-slate-600">"{wireDetails.rejection_notes}"</p>}
+          {wireDetails?.rejection_notes && <p className="italic text-slate-600">&quot;{wireDetails.rejection_notes}&quot;</p>}
         </div>
         <Link href={Permissions.getPortalRoute(userRole as any)} className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
       </div>
@@ -206,10 +206,8 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
     return (
       <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-emerald-200 text-center">
         <CheckCircle size={32} className="mx-auto text-emerald-600 mb-4" />
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Cryptographically Signed</h2>
-        <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs text-slate-500 break-all text-left mb-6">
-          HASH: {wireDetails.cryptographic_hash}
-        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Wire Approved</h2>
+        <p className="mb-6 text-sm text-slate-500">Your approval has been securely signed and recorded.</p>
         <Link href={Permissions.getPortalRoute(userRole as any)} className="text-blue-600 font-medium hover:underline">Return to Portal</Link>
       </div>
     );
@@ -342,7 +340,7 @@ export default function ApprovalScreen({ params }: { params: { id: string } }) {
                 <PhoneCall className="text-amber-600" size={20} /> Vendor Callback Verification Required
               </h2>
               <p className="text-sm text-slate-600 mt-1">
-                Because this wire request includes a change to banking or routing details, policy requires an out-of-band phone call to the vendor's pre-existing phone number.
+                Because this wire request includes a change to banking or routing details, policy requires an out-of-band phone call to the vendor&apos;s pre-existing phone number.
               </p>
             </div>
             

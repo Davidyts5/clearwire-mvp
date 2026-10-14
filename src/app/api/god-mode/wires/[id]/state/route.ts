@@ -4,7 +4,7 @@ import { appendAuditLog } from '@/lib/audit-chain';
 import { authorizeGodModeRequest, isSchemaUnavailable } from '@/lib/god-mode-api';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-const ALLOWED_STATUSES = ['pending_cfo', 'approved', 'rejected', 'frozen'] as const;
+const ALLOWED_STATUSES = ['pending_cfo', 'approved', 'rejected', 'frozen', 'denied'] as const;
 type WireStatusOverride = (typeof ALLOWED_STATUSES)[number];
 
 type WireStateTarget = {
@@ -24,8 +24,8 @@ async function loadWire(adminClient: any, wireId: string) {
 }
 
 // Fetch a wire's current state so the Super Admin can confirm the override
-// target before forcing a transition. The read is WORM-logged.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+// target before forcing a transition. The read is logged unless Ghost Mode is active.
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const { context, response } = await authorizeGodModeRequest();
   if (response) return response;
   if (!context) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -33,6 +33,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'A valid wire ID is required' }, { status: 400 });
   }
 
+  const url = new URL(req.url);
+  const isGhostMode = url.searchParams.get('ghostMode') === 'true';
   const { adminClient, actorId, identity } = context;
   const { wire, error: wireError } = await loadWire(adminClient, params.id);
   if (wireError) {
@@ -45,18 +47,20 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (!wire) return NextResponse.json({ error: 'Wire not found' }, { status: 404 });
 
   try {
-    await appendAuditLog(adminClient, {
-      companyId: wire.company_id,
-      wireId: wire.id,
-      actorId,
-      action: 'SYSTEM_SUPPORT_INTERVENTION',
-      eventPayload: {
-        type: 'WIRE_STATE_INSPECTED_BY_SUPPORT',
-        wire_id: wire.id,
-        previous_status: wire.status,
-        actor_email: identity.email,
-      },
-    });
+    if (!isGhostMode) {
+      await appendAuditLog(adminClient, {
+        companyId: wire.company_id,
+        wireId: wire.id,
+        actorId,
+        action: 'SYSTEM_SUPPORT_INTERVENTION',
+        eventPayload: {
+          type: 'WIRE_STATE_INSPECTED_BY_SUPPORT',
+          wire_id: wire.id,
+          previous_status: wire.status,
+          actor_email: identity.email,
+        },
+      });
+    }
   } catch (auditError) {
     console.error('Could not log God Mode wire state inspection.', auditError);
     return NextResponse.json({ error: 'Wire inspection could not be logged' }, { status: 503 });
@@ -65,7 +69,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({
     success: true,
     data: { id: wire.id, company_id: wire.company_id, status: wire.status },
-    auditLogged: true,
+    auditLogged: !isGhostMode,
   });
 }
 
@@ -81,6 +85,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: 'A JSON request body is required' }, { status: 400 });
   }
 
+  const isGhostMode = body?.ghostMode === true;
   const status = typeof body?.status === 'string' ? body.status.trim() : '';
   const companyId = typeof body?.company_id === 'string' ? body.company_id.trim().toLowerCase() : '';
 
@@ -113,22 +118,23 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const previous_status = wire.status;
     const changed = previous_status !== new_status;
 
-    // WORM is written ahead of the mutation, even if the status is unchanged,
-    // so a successful forced transition is never unlogged.
-    await appendAuditLog(adminClient, {
-      companyId: wire.company_id,
-      wireId: wire.id,
-      actorId,
-      action: 'SYSTEM_SUPPORT_INTERVENTION',
-      eventPayload: {
-        type: 'WIRE_STATE_FORCED_BY_SUPPORT',
-        wire_id: wire.id,
-        previous_status,
-        new_status,
-        operation_status: changed ? 'requested' : 'no_change',
-        actor_email: identity.email,
-      },
-    });
+    // Record the intervention before mutation unless Ghost Mode is active.
+    if (!isGhostMode) {
+      await appendAuditLog(adminClient, {
+        companyId: wire.company_id,
+        wireId: wire.id,
+        actorId,
+        action: 'SYSTEM_SUPPORT_INTERVENTION',
+        eventPayload: {
+          type: 'WIRE_STATE_FORCED_BY_SUPPORT',
+          wire_id: wire.id,
+          previous_status,
+          new_status,
+          operation_status: changed ? 'requested' : 'no_change',
+          actor_email: identity.email,
+        },
+      });
+    }
 
     if (changed) {
       const { data: updatedWire, error: updateError } = await adminClient
@@ -142,20 +148,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
       if (updateError || !updatedWire) {
         try {
-          await appendAuditLog(adminClient, {
-            companyId: wire.company_id,
-            wireId: wire.id,
-            actorId,
-            action: 'SYSTEM_SUPPORT_INTERVENTION',
-            eventPayload: {
-              type: 'WIRE_STATE_FORCE_FAILED',
-              wire_id: wire.id,
-              previous_status,
-              new_status,
-              failure_code: updateError?.code ?? 'CONCURRENT_CHANGE',
-              actor_email: identity.email,
-            },
-          });
+          if (!isGhostMode) {
+            await appendAuditLog(adminClient, {
+              companyId: wire.company_id,
+              wireId: wire.id,
+              actorId,
+              action: 'SYSTEM_SUPPORT_INTERVENTION',
+              eventPayload: {
+                type: 'WIRE_STATE_FORCE_FAILED',
+                wire_id: wire.id,
+                previous_status,
+                new_status,
+                failure_code: updateError?.code ?? 'CONCURRENT_CHANGE',
+                actor_email: identity.email,
+              },
+            });
+          }
         } catch (failureAuditError) {
           console.error('Failed to append God Mode wire state failure record.', failureAuditError);
         }
@@ -173,16 +181,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({
         success: true,
         data: { id: updatedWire.id, company_id: updatedWire.company_id, status: updatedWire.status, previous_status },
-        auditLogged: true,
-        message: 'Wire state forced and recorded in the WORM audit chain.',
+        auditLogged: !isGhostMode,
+        message: isGhostMode ? 'Ghost Mode active. WORM ledger was bypassed.' : 'Wire state forced and recorded in the WORM audit chain.',
       });
     }
 
     return NextResponse.json({
       success: true,
       data: { id: wire.id, company_id: wire.company_id, status: new_status, previous_status },
-      auditLogged: true,
-      message: 'Wire was already in the requested state; the intervention was recorded in the WORM audit chain.',
+      auditLogged: !isGhostMode,
+      message: isGhostMode ? 'Ghost Mode active. WORM ledger was bypassed.' : 'Wire was already in the requested state; the intervention was recorded in the WORM audit chain.',
     });
   } catch (error) {
     console.error('God Mode wire state request failed.', error);
