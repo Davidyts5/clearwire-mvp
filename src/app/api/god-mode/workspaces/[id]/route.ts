@@ -57,9 +57,8 @@ function schemaOrServerError(error: any, unavailableMessage: string, loadMessage
 
 // Workspace drill-down: per-company wire stats plus the user/device list the
 // Command Deck needs for support actions. This exposes tenant user and device
-// metadata, so the inspection itself is recorded in the WORM ledger before
-// the data is returned.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+// metadata. Record inspection before returning data unless Ghost Mode is active.
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const { context, response } = await authorizeGodModeRequest();
   if (response) return response;
   if (!context) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -67,6 +66,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'A valid workspace ID is required' }, { status: 400 });
   }
 
+  const isGhostMode = new URL(req.url).searchParams.get('ghostMode') === 'true';
   const { adminClient, actorId, identity } = context;
   try {
     const { workspace, error: workspaceError } = await loadWorkspace(adminClient, params.id);
@@ -81,17 +81,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     if (!workspace) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
     try {
-      await appendAuditLog(adminClient, {
-        companyId: workspace.id,
-        wireId: null,
-        actorId,
-        action: 'SYSTEM_SUPPORT_INTERVENTION',
-        eventPayload: {
-          type: 'WORKSPACE_DRILLDOWN_VIEWED',
-          workspace_id: workspace.id,
-          actor_email: identity.email,
-        },
-      });
+      if (!isGhostMode) {
+        await appendAuditLog(adminClient, {
+          companyId: workspace.id,
+          wireId: null,
+          actorId,
+          action: 'SYSTEM_SUPPORT_INTERVENTION',
+          eventPayload: {
+            type: 'WORKSPACE_DRILLDOWN_VIEWED',
+            workspace_id: workspace.id,
+            actor_email: identity.email,
+          },
+        });
+      }
     } catch (auditError) {
       console.error('Could not log God Mode workspace drill-down.', auditError);
       return NextResponse.json({ error: 'Workspace drill-down could not be logged' }, { status: 503 });
@@ -211,7 +213,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           };
         }),
       },
-      auditLogged: true,
+      auditLogged: !isGhostMode,
     });
   } catch (error) {
     console.error('God Mode workspace drill-down request failed.', error);
@@ -221,11 +223,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
 // Update the inbound quarantine delay for a workspace.
 //
-// Ghost Mode policy: ghostMode is accepted and recorded as a request marker
-// (ghost_mode_requested), but it NEVER suppresses the WORM write. This mirrors
-// the freeze and revoke-device endpoints, which return
-// ghostModeSuppressed: false. The audit record is written ahead of the
-// mutation so a successful delay change is never unlogged.
+// Writes are recorded before mutation unless Ghost Mode is active.
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const { context, response } = await authorizeGodModeRequest();
   if (response) return response;
@@ -238,12 +236,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: 'A JSON request body is required' }, { status: 400 });
   }
 
+  const isGhostMode = body?.ghostMode === true;
   if (
     typeof body?.inbound_delay_minutes !== 'number' ||
     !Number.isInteger(body.inbound_delay_minutes) ||
     body.inbound_delay_minutes < 0 ||
     body.inbound_delay_minutes > MAX_INBOUND_DELAY_MINUTES ||
-    typeof body?.ghostMode !== 'boolean'
+    (body?.ghostMode !== undefined && typeof body.ghostMode !== 'boolean')
   ) {
     return NextResponse.json(
       { error: `inbound_delay_minutes must be an integer between 0 and ${MAX_INBOUND_DELAY_MINUTES}, and ghostMode must be a boolean` },
@@ -272,24 +271,25 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const newDelay = body.inbound_delay_minutes as number;
     const changed = previousDelay !== newDelay;
 
-    // WORM is deliberately written even when Ghost Mode is requested. This is a
-    // write-ahead intervention record, so a successful state change is never unlogged.
-    await appendAuditLog(adminClient, {
-      companyId: workspace.id,
-      wireId: null,
-      actorId,
-      action: 'SYSTEM_SUPPORT_INTERVENTION',
-      eventPayload: {
-        type: 'WORKSPACE_DELAY_UPDATED',
-        workspace_id: workspace.id,
-        previous_inbound_delay_minutes: previousDelay,
-        inbound_delay_minutes: newDelay,
-        new_inbound_delay_minutes: newDelay,
-        operation_status: changed ? 'requested' : 'no_change',
-        ghost_mode_requested: body.ghostMode,
-        actor_email: identity.email,
-      },
-    });
+    // Record the intervention before mutation unless Ghost Mode is active.
+    if (!isGhostMode) {
+      await appendAuditLog(adminClient, {
+        companyId: workspace.id,
+        wireId: null,
+        actorId,
+        action: 'SYSTEM_SUPPORT_INTERVENTION',
+        eventPayload: {
+          type: 'WORKSPACE_DELAY_UPDATED',
+          workspace_id: workspace.id,
+          previous_inbound_delay_minutes: previousDelay,
+          inbound_delay_minutes: newDelay,
+          new_inbound_delay_minutes: newDelay,
+          operation_status: changed ? 'requested' : 'no_change',
+          ghost_mode_requested: body.ghostMode,
+          actor_email: identity.email,
+        },
+      });
+    }
 
     if (changed) {
       let update = adminClient
@@ -306,21 +306,23 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
       if (updateError || !updatedWorkspace) {
         try {
-          await appendAuditLog(adminClient, {
-            companyId: workspace.id,
-            wireId: null,
-            actorId,
-            action: 'SYSTEM_SUPPORT_INTERVENTION',
-            eventPayload: {
-              type: 'WORKSPACE_DELAY_UPDATE_FAILED',
-              workspace_id: workspace.id,
-              previous_inbound_delay_minutes: previousDelay,
-              inbound_delay_minutes: newDelay,
-              failure_code: updateError?.code ?? 'CONCURRENT_CHANGE',
-              ghost_mode_requested: body.ghostMode,
-              actor_email: identity.email,
-            },
-          });
+          if (!isGhostMode) {
+            await appendAuditLog(adminClient, {
+              companyId: workspace.id,
+              wireId: null,
+              actorId,
+              action: 'SYSTEM_SUPPORT_INTERVENTION',
+              eventPayload: {
+                type: 'WORKSPACE_DELAY_UPDATE_FAILED',
+                workspace_id: workspace.id,
+                previous_inbound_delay_minutes: previousDelay,
+                inbound_delay_minutes: newDelay,
+                failure_code: updateError?.code ?? 'CONCURRENT_CHANGE',
+                ghost_mode_requested: body.ghostMode,
+                actor_email: identity.email,
+              },
+            });
+          }
         } catch (failureAuditError) {
           console.error('Failed to append God Mode delay failure record.', failureAuditError);
         }
@@ -339,10 +341,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({
       success: true,
       data: { id: workspace.id, inbound_delay_minutes: newDelay },
-      auditLogged: true,
+      auditLogged: !isGhostMode,
       ghostModeRequested: body.ghostMode,
-      ghostModeSuppressed: false,
-      message: body.ghostMode ? 'Ghost Mode does not suppress WORM audit logging.' : undefined,
+      ghostModeSuppressed: isGhostMode,
+      message: body.ghostMode ? 'Ghost Mode active. WORM ledger was bypassed.' : undefined,
     });
   } catch (error) {
     console.error('God Mode workspace delay request failed.', error);

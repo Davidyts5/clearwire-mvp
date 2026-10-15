@@ -36,7 +36,7 @@ export const NAVIGATION_CONFIG: NavItem[] = [
   { label: 'Security & Policy Engine', href: '/settings', icon: ShieldCheck, allowedRoles: [ROLES.CFO] },
   
   // Auditor / Compliance
-  { label: 'Active Cases', href: '/auditor-dashboard', icon: ShieldCheck, allowedRoles: [ROLES.AUDITOR, ROLES.CFO] },
+  { label: 'Compliance Hub', href: '/auditor-dashboard', icon: ShieldCheck, allowedRoles: [ROLES.AUDITOR, ROLES.CFO] },
   { label: 'Risk Analytics', href: '/auditor-dashboard/analytics', icon: BarChart3, allowedRoles: [ROLES.AUDITOR, ROLES.CFO] },
   { label: 'Master Ledger', href: '/auditor-dashboard/ledger', icon: FileDigit, allowedRoles: [ROLES.AUDITOR, ROLES.CFO] },
   { label: 'Compliance Reports', href: '/auditor-dashboard/reports', icon: FileText, allowedRoles: [ROLES.AUDITOR, ROLES.CFO] },

@@ -9,7 +9,7 @@ export default function LegalOperatorNotice() {
       <h2 id="operator-details-title" className="text-lg font-semibold tracking-tight text-[#203329]">Who operates ClearWire</h2>
       {missingDetails && (
         <p role="status" className="mt-3 rounded-lg border border-[#e4d4b6] bg-white/70 p-3 text-sm leading-6 text-[#594d3e]">
-          Operator details are not fully configured in this build. This page is a product-demo draft; complete the missing details and have the notice reviewed before offering ClearWire publicly.
+          Operator details are not fully configured. These pilot documents remain drafts: identify the legal operator, provide a monitored privacy email and business address, and obtain appropriate legal review before inviting customers or accepting live data.
         </p>
       )}
       <address className="mt-4 space-y-2 text-sm not-italic leading-6 text-[#405046]">

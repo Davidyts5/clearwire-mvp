@@ -4,64 +4,81 @@ import LegalOperatorNotice from '@/components/LegalOperatorNotice';
 import { TERMS_VERSION } from '@/lib/legal';
 
 export const metadata: Metadata = {
-  title: 'Terms of Use | ClearWire',
-  description: 'Terms for the ClearWire payment-request review demonstration.',
+  title: 'Pilot Terms of Use | ClearWire',
+  description: 'Early-access terms for evaluating ClearWire payment-request review and approval workflows.',
 };
 
 export default function TermsPage() {
   return (
-    <PolicyDocument
-      title="Terms of use"
-      description="Conditions for using the current ClearWire B2B payment-request review demonstration."
-    >
+    <PolicyDocument title="Pilot terms of use" description="Conditions for a limited, business-to-business evaluation of ClearWire.">
       <p className="rounded-lg border border-[#d7c8a9] bg-[#fbf7ed] p-4 text-sm leading-6 text-[#594d3e]">
-        These working terms (version {TERMS_VERSION}) describe the current demo, not a production financial service. The operator details below must be completed and these terms reviewed before public or production use.
+        Early-access draft · version {TERMS_VERSION}. These terms do not certify production readiness. Complete the operator details, agree a written pilot plan, and obtain appropriate legal and security review before onboarding customers or accepting live payment data. Until then, use fictional or properly anonymized test data only.
       </p>
 
       <LegalOperatorNotice />
 
-      <section aria-labelledby="terms-demo">
-        <h2 id="terms-demo" className="text-xl font-semibold text-[#203329]">1. What ClearWire does</h2>
-        <p className="mt-3">ClearWire is a B2B demonstration of an internal payment-request review workflow. It can record vendor information, payment-request details, review signals, passkey-confirmed approvals and an audit history.</p>
-        <p className="mt-3">ClearWire does not connect to a bank, initiate or execute a payment, hold funds, or replace a bank or payment provider. An approval recorded in ClearWire is an internal workflow record; it is not a bank instruction, a guarantee that a payment will be made, or confirmation that funds have moved.</p>
+      <section aria-labelledby="terms-scope">
+        <h2 id="terms-scope" className="text-xl font-semibold text-[#203329]">1. The service and your agreement</h2>
+        <p className="mt-3">ClearWire helps a business collect wire requests, review vendor changes, apply internal approval rules, and examine exceptions and recorded activity. These terms apply to the organization participating in the pilot and its authorized adult users. If you accept for an organization, you must have authority to do so.</p>
+        <p className="mt-3">ClearWire is an internal request-and-approval tool, not a bank or payment provider. It is not connected to your bank and does not hold funds or initiate, release, block or reverse payments. An app approval is an internal workflow record, not a bank instruction or confirmation that money has moved. The service is not legal, accounting, investment, or regulatory advice.</p>
       </section>
 
-      <section aria-labelledby="terms-demo-use">
-        <h2 id="terms-demo-use" className="text-xl font-semibold text-[#203329]">2. Demo use and information entered</h2>
-        <p className="mt-3">Use this build for demonstration and testing only. Do not rely on it as the sole control for a live payment, and do not upload live vendor banking details, bank credentials or real payment instructions unless the deployment has been reviewed and expressly approved for that use.</p>
-        <p className="mt-3">Workspace members must be authorized by their organization. You are responsible for entering accurate information, using only data your organization is allowed to provide, protecting sign-in credentials and passkeys, and checking any approval independently through your organization’s established process.</p>
+      <section aria-labelledby="terms-pilot">
+        <h2 id="terms-pilot" className="text-xl font-semibold text-[#203329]">2. Pilot access, duration and scope</h2>
+        <p className="mt-3">Pilot participation requires an arrangement with the operator. The written pilot plan should identify the participating organization, authorized users, start and end dates, permitted data, evaluation goals, support contact, and any fees. These terms do not themselves enroll you or grant access to another workspace.</p>
+        <p className="mt-3">The intended pilot model is invitation-led. A publicly reachable registration page is not approval to run a live pilot; invitation-only access is not yet enforced throughout this build. Only use an organization’s workspace with its authorization. A signed pilot agreement takes precedence over these general terms where it expressly addresses the same subject, subject to applicable law.</p>
       </section>
 
-      <section aria-labelledby="terms-signals">
-        <h2 id="terms-signals" className="text-xl font-semibold text-[#203329]">3. Review signals and approvals</h2>
-        <p className="mt-3">Risk scores and policy flags are configurable workflow aids. They can be incomplete or incorrect and do not guarantee detection or prevention of fraud, correctness of vendor details, legal or regulatory compliance, or successful payment. Human review and your organization’s controls remain necessary.</p>
-        <p className="mt-3">Passkey authentication confirms a browser/device ceremony for an app action; it does not independently verify the truth of a payment request or sign an instruction at a bank.</p>
+      <section aria-labelledby="terms-data">
+        <h2 id="terms-data" className="text-xl font-semibold text-[#203329]">3. Permitted data and customer responsibilities</h2>
+        <p className="mt-3">Use fictional or properly anonymized data unless the operator and your organization have expressly approved a defined live-data scope in writing after security review and any necessary data-processing agreement. A trial invitation or payment of a pilot fee is not that approval. Do not use ClearWire as your sole control for a live payment.</p>
+        <p className="mt-3">Never upload online-banking passwords, bank authentication codes, payment-card security codes, private cryptographic keys, or unrelated sensitive personal information. You are responsible for lawful collection and sharing of the information you provide, its accuracy, and maintaining your own records and payment controls.</p>
+        <p className="mt-3">Protect credentials and passkeys, review users and approval limits, and verify bank-detail changes using a trusted contact channel independent of the change request. Do not access other workspaces, bypass permissions, introduce malicious content, or test security without written authorization. Report suspected misuse through the pilot contact agreed with the operator.</p>
       </section>
 
-      <section aria-labelledby="terms-accounts">
-        <h2 id="terms-accounts" className="text-xl font-semibold text-[#203329]">4. Accounts and workspace access</h2>
-        <p className="mt-3">Provide current business account information, keep access limited to authorized team members, and tell your workspace administrator if access should be changed. Workspace administrators manage invitations, roles and approval limits. Do not attempt to access another workspace or interfere with the service.</p>
+      <section aria-labelledby="terms-decisions">
+        <h2 id="terms-decisions" className="text-xl font-semibold text-[#203329]">4. Human decisions and product limitations</h2>
+        <p className="mt-3">An accounts-payable user or anyone with access to your banking systems may still make a payment outside ClearWire, even if a request has not been approved or has been rejected in the app. ClearWire cannot prevent that bypass or automatically detect off-platform payments. Your organization remains responsible for bank access permissions, bank-side approval requirements, payment execution and reconciliation.</p>
+        <p className="mt-3">Risk scores, exception badges and vendor-change signals help prioritize review. They can be incorrect, incomplete, or absent and are not findings of fraud. Human reviewers remain responsible for decisions and for following their organization’s banking and approval procedures.</p>
+        <p className="mt-3">Passkeys authenticate an app action; they do not establish that a vendor or invoice is genuine. Reports and audit-chain checks are not independent certifications of security, regulatory compliance, or the completeness of business activity. ClearWire does not guarantee prevention of fraud, recovery of funds, or any particular financial outcome.</p>
       </section>
 
-      <section aria-labelledby="terms-billing">
-        <h2 id="terms-billing" className="text-xl font-semibold text-[#203329]">5. Fees and refunds</h2>
-        <p className="mt-3">The current app build has no checkout, subscription or billing flow and does not collect a product fee. There is therefore no in-app purchase or refund process in this demo. Any future paid offering would require separately presented commercial terms before purchase.</p>
+      <section aria-labelledby="terms-support">
+        <h2 id="terms-support" className="text-xl font-semibold text-[#203329]">5. Support access and history limitations</h2>
+        <p className="mt-3">Authorized ClearWire operators may access workspace records and invoices to provide support, correct app records, manage workspace settings and revoke app-device access. Replacing an invoice can preserve its prior version in restricted support storage. These operator-only tools are not customer or workspace-administrator features and do not provide access to your bank. Agree permitted support access and correction procedures in the pilot plan.</p>
+        <p className="mt-3">Customer-visible history records app workflow activity but may not include every operator support action. It is not a complete bank-transaction record or a complete record of all administrative access and changes. Do not rely on it as your sole payment or compliance record; agree any additional recordkeeping requirements before live use.</p>
       </section>
 
-      <section aria-labelledby="terms-availability">
-        <h2 id="terms-availability" className="text-xl font-semibold text-[#203329]">6. Availability and limitations</h2>
-        <p className="mt-3">This is demonstration software and may change, be incomplete, unavailable or contain errors. Do not treat generated reports, audit-chain checks, risk flags or account status as externally certified evidence or a substitute for your own records and controls.</p>
+      <section aria-labelledby="terms-fees">
+        <h2 id="terms-fees" className="text-xl font-semibold text-[#203329]">6. Fees, renewal and refunds</h2>
+        <p className="mt-3">Any pilot price, currency, taxes, payment schedule, cancellation rights and refund terms must be disclosed and agreed in a separate written pilot agreement before payment. The app has no integrated checkout or subscription billing. That does not mean every pilot is free, and these terms do not authorize a charge.</p>
+        <p className="mt-3">A pilot does not automatically renew or convert to a paid production subscription under these terms. Any extension or paid conversion requires a further written agreement. Refunds and fees on early termination follow the agreed pilot terms and any mandatory rights under applicable law.</p>
       </section>
 
-      <section aria-labelledby="terms-privacy">
-        <h2 id="terms-privacy" className="text-xl font-semibold text-[#203329]">7. Privacy, data requests and children</h2>
-        <p className="mt-3">Use of the app also involves the <a className="font-semibold text-[#315741] underline underline-offset-4" href="/privacy">Privacy Notice</a> and <a className="font-semibold text-[#315741] underline underline-offset-4" href="/cookies">Cookie Notice</a>. The data-request form records a deletion-review request but does not itself delete data. ClearWire is not designed for children under 18; do not create accounts for children or enter children’s personal information.</p>
+      <section aria-labelledby="terms-content">
+        <h2 id="terms-content" className="text-xl font-semibold text-[#203329]">7. Workspace information and feedback</h2>
+        <p className="mt-3">Your organization retains its rights in information it provides. It authorizes the operator and relevant service providers to process that information as needed to deliver, support, and secure the agreed pilot, subject to the privacy notice and applicable agreements. These terms do not transfer ownership of customer records to ClearWire or authorize their use in public demonstrations.</p>
+        <p className="mt-3">You may provide product feedback for consideration in improving ClearWire. Do not include confidential third-party material in feedback unless you are authorized to share it. Use of third-party software remains subject to its applicable license notices.</p>
+      </section>
+
+      <section aria-labelledby="terms-ending">
+        <h2 id="terms-ending" className="text-xl font-semibold text-[#203329]">8. Support, suspension and ending a pilot</h2>
+        <p className="mt-3">Pilot features may change or be unavailable. No uptime, response-time, backup, or recovery service level is promised by these terms. Support hours and any commitments must be agreed in writing. Keep independent copies of important information.</p>
+        <p className="mt-3">The operator may restrict or suspend access to address misuse, a security concern, a legal requirement, or a material breach of the pilot terms. Either party may end the pilot as set out in the written agreement. At the agreed end date, stop using the service unless an extension has been agreed.</p>
+        <p className="mt-3">Arrange available exports and the return or deletion of permitted pilot data before access ends. Export features do not constitute a complete backup. Closing access or submitting a deletion request does not automatically erase records, audit history, preserved invoices, or provider backups. A retention and deletion plan must be agreed before live data is accepted.</p>
+      </section>
+
+      <section aria-labelledby="terms-legal">
+        <h2 id="terms-legal" className="text-xl font-semibold text-[#203329]">9. Early-access status and legal protections</h2>
+        <p className="mt-3">This is evaluation software, not a production-readiness or compliance certification. Except for commitments expressly made in the written pilot agreement and rights that cannot lawfully be excluded, the pilot is offered as available, without a promise that it will be uninterrupted, error-free, or suitable for every use.</p>
+        <p className="mt-3">These draft terms do not set a monetary liability cap, choose a governing jurisdiction, or require arbitration. Any allocation of liability and dispute procedure must be settled with the identified operator in the written pilot agreement and reviewed for the applicable law. Nothing in these terms excludes liability or rights that cannot lawfully be excluded.</p>
       </section>
 
       <section aria-labelledby="terms-acceptance">
-        <h2 id="terms-acceptance" className="text-xl font-semibold text-[#203329]">8. Acceptance and updates</h2>
-        <p className="mt-3">Creating a workspace or accepting an invitation requires an affirmative acknowledgement of these terms and the privacy notice. The app records the applicable notice versions and acceptance time in the workspace audit history. If you do not agree, do not create or use an account.</p>
-        <p className="mt-3">The terms may change as the product changes. The displayed version date identifies this text. These working terms require review against the selected operator, deployment and applicable law before production use.</p>
+        <h2 id="terms-acceptance" className="text-xl font-semibold text-[#203329]">10. Privacy, acceptance and changes</h2>
+        <p className="mt-3">Read the <a className="font-semibold text-[#315741] underline underline-offset-4" href="/privacy">Privacy Notice</a>, <a className="font-semibold text-[#315741] underline underline-offset-4" href="/cookies">Cookie Notice</a>, and <a className="font-semibold text-[#315741] underline underline-offset-4" href="/third-party-notices">third-party notices</a>. ClearWire is intended for business users aged 18 or over, not children.</p>
+        <p className="mt-3">The workspace-creation and invitation forms require agreement to these terms and acknowledgement of the privacy notice. Their completion flows record the versions and acceptance time in the workspace audit history. Acknowledgement of a privacy notice is not blanket consent to every use of personal information.</p>
+        <p className="mt-3">A new notice date does not prove existing users have accepted revised terms. This build has no automatic reacceptance workflow. Material changes to an agreed pilot must be communicated and any necessary agreement obtained before they apply. Keep a copy of the terms and written pilot plan you accept.</p>
       </section>
     </PolicyDocument>
   );

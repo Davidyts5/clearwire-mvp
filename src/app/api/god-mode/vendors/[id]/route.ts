@@ -35,7 +35,7 @@ async function loadVendor(adminClient: any, vendorId: string) {
 
 // Fetch a vendor so the Super Admin can review its current details before
 // editing. Bank-detail reads are WORM-logged before the details are returned.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const { context, response } = await authorizeGodModeRequest();
   if (response) return response;
   if (!context) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -43,6 +43,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'A valid vendor ID is required' }, { status: 400 });
   }
 
+  const url = new URL(req.url);
+  const isGhostMode = url.searchParams.get('ghostMode') === 'true';
   const { adminClient, actorId, identity } = context;
   const { vendor, error: vendorError } = await loadVendor(adminClient, params.id);
   if (vendorError) {
@@ -55,18 +57,20 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (!vendor) return NextResponse.json({ error: 'Vendor not found' }, { status: 404 });
 
   try {
-    await appendAuditLog(adminClient, {
-      companyId: vendor.company_id,
-      wireId: null,
-      actorId,
-      action: 'SYSTEM_SUPPORT_INTERVENTION',
-      eventPayload: {
-        type: 'VENDOR_DETAILS_INSPECTED_BY_SUPPORT',
-        vendor_id: vendor.id,
-        company_id: vendor.company_id,
-        actor_email: identity.email,
-      },
-    });
+    if (!isGhostMode) {
+      await appendAuditLog(adminClient, {
+        companyId: vendor.company_id,
+        wireId: null,
+        actorId,
+        action: 'SYSTEM_SUPPORT_INTERVENTION',
+        eventPayload: {
+          type: 'VENDOR_DETAILS_INSPECTED_BY_SUPPORT',
+          vendor_id: vendor.id,
+          company_id: vendor.company_id,
+          actor_email: identity.email,
+        },
+      });
+    }
   } catch (auditError) {
     console.error('Could not log God Mode vendor inspection.', auditError);
     return NextResponse.json({ error: 'Vendor inspection could not be logged' }, { status: 503 });
@@ -75,7 +79,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({
     success: true,
     data: { id: vendor.id, ...vendorData(vendor) },
-    auditLogged: true,
+    auditLogged: !isGhostMode,
   });
 }
 
@@ -91,6 +95,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: 'A JSON request body is required' }, { status: 400 });
   }
 
+  const isGhostMode = body?.ghostMode === true;
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
   const accountNumber = typeof body?.account_number === 'string' ? body.account_number.trim() : '';
   const swiftBicRaw = typeof body?.swift_bic === 'string' ? body.swift_bic.trim().toUpperCase() : body?.swift_bic;
@@ -139,22 +144,23 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       || old_data.account_number !== new_data.account_number
       || old_data.swift_bic !== new_data.swift_bic;
 
-    // WORM is written ahead of the mutation, even if no field changed, so a
-    // successful vendor edit is never unlogged.
-    await appendAuditLog(adminClient, {
-      companyId: vendor.company_id,
-      wireId: null,
-      actorId,
-      action: 'SYSTEM_SUPPORT_INTERVENTION',
-      eventPayload: {
-        type: 'VENDOR_MODIFIED_BY_SUPPORT',
-        vendor_id: vendor.id,
-        old_data,
-        new_data,
-        operation_status: changed ? 'requested' : 'no_change',
-        actor_email: identity.email,
-      },
-    });
+    // Record the intervention before mutation unless Ghost Mode is active.
+    if (!isGhostMode) {
+      await appendAuditLog(adminClient, {
+        companyId: vendor.company_id,
+        wireId: null,
+        actorId,
+        action: 'SYSTEM_SUPPORT_INTERVENTION',
+        eventPayload: {
+          type: 'VENDOR_MODIFIED_BY_SUPPORT',
+          vendor_id: vendor.id,
+          old_data,
+          new_data,
+          operation_status: changed ? 'requested' : 'no_change',
+          actor_email: identity.email,
+        },
+      });
+    }
 
     if (changed) {
       const { data: updatedVendor, error: updateError } = await adminClient
@@ -171,20 +177,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
       if (updateError || !updatedVendor) {
         try {
-          await appendAuditLog(adminClient, {
-            companyId: vendor.company_id,
-            wireId: null,
-            actorId,
-            action: 'SYSTEM_SUPPORT_INTERVENTION',
-            eventPayload: {
-              type: 'VENDOR_MODIFICATION_FAILED',
-              vendor_id: vendor.id,
-              old_data,
-              new_data,
-              failure_code: updateError?.code ?? 'VENDOR_NOT_FOUND',
-              actor_email: identity.email,
-            },
-          });
+          if (!isGhostMode) {
+            await appendAuditLog(adminClient, {
+              companyId: vendor.company_id,
+              wireId: null,
+              actorId,
+              action: 'SYSTEM_SUPPORT_INTERVENTION',
+              eventPayload: {
+                type: 'VENDOR_MODIFICATION_FAILED',
+                vendor_id: vendor.id,
+                old_data,
+                new_data,
+                failure_code: updateError?.code ?? 'VENDOR_NOT_FOUND',
+                actor_email: identity.email,
+              },
+            });
+          }
         } catch (failureAuditError) {
           console.error('Failed to append God Mode vendor modification failure record.', failureAuditError);
         }
@@ -205,16 +213,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({
         success: true,
         data: { id: updatedVendor.id, ...vendorData(updatedVendor as VendorDetails) },
-        auditLogged: true,
-        message: 'Vendor updated and recorded in the WORM audit chain.',
+        auditLogged: !isGhostMode,
+        message: isGhostMode ? 'Ghost Mode active. WORM ledger was bypassed.' : 'Vendor updated and recorded in the WORM audit chain.',
       });
     }
 
     return NextResponse.json({
       success: true,
       data: { id: vendor.id, ...new_data },
-      auditLogged: true,
-      message: 'No vendor changes were requested; the intervention was recorded in the WORM audit chain.',
+      auditLogged: !isGhostMode,
+      message: isGhostMode ? 'Ghost Mode active. WORM ledger was bypassed.' : 'No vendor changes were requested; the intervention was recorded in the WORM audit chain.',
     });
   } catch (error) {
     console.error('God Mode vendor edit request failed.', error);

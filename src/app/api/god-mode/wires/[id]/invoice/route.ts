@@ -60,7 +60,7 @@ function filePathFailure() {
   return NextResponse.json({ error: 'Invoice path is missing or does not belong to this workspace' }, { status: 409 });
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const { context, response } = await authorizeGodModeRequest();
   if (response) return response;
   if (!context) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -68,6 +68,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'A valid wire ID is required' }, { status: 400 });
   }
 
+  const url = new URL(req.url);
+  const isGhostMode = url.searchParams.get('ghostMode') === 'true';
   const { adminClient, actorId, identity } = context;
   const { wire, error: wireError } = await getInvoiceTarget(adminClient, params.id);
   if (wireError) {
@@ -79,11 +81,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (!wire.invoice_path || !isOwnedInvoicePath(wire.invoice_path, wire.company_id)) return filePathFailure();
 
   try {
-    await appendSupportInvoiceEvent(adminClient, actorId, wire.company_id, wire.id, 'QUARANTINED_INVOICE_INSPECTED_BY_SUPPORT', {
-      invoice_path: wire.invoice_path,
-      signed_url_ttl_seconds: 60,
-      actor_email: identity.email,
-    });
+    if (!isGhostMode) {
+      await appendSupportInvoiceEvent(adminClient, actorId, wire.company_id, wire.id, 'QUARANTINED_INVOICE_INSPECTED_BY_SUPPORT', {
+        invoice_path: wire.invoice_path,
+        signed_url_ttl_seconds: 60,
+        actor_email: identity.email,
+      });
+    }
   } catch (auditError) {
     console.error('Could not log God Mode invoice inspection.', auditError);
     return NextResponse.json({ error: 'Invoice inspection could not be logged' }, { status: 503 });
@@ -99,7 +103,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
 
   return NextResponse.json(
-    { success: true, data: { wireId: wire.id, signedUrl: signedUrlData.signedUrl, expiresInSeconds: 60 } },
+    { success: true, auditLogged: !isGhostMode, data: { wireId: wire.id, signedUrl: signedUrlData.signedUrl, expiresInSeconds: 60 } },
     { headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
   );
 }
@@ -130,6 +134,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'A multipart form with an invoice file is required' }, { status: 400 });
   }
 
+  const isGhostMode = formData.get('ghostMode') === 'true';
   const fileValue = formData.get('invoice');
   if (!fileValue || typeof fileValue !== 'object' || typeof (fileValue as File).arrayBuffer !== 'function') {
     return NextResponse.json({ error: 'The invoice field must contain a file' }, { status: 400 });
@@ -182,7 +187,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     downloadError = { code: 'STORAGE_DOWNLOAD_EXCEPTION', message: error instanceof Error ? error.message : 'Unknown storage error' };
   }
   if (downloadError || !originalBlob) {
-    await appendFailureEvent(adminClient, actorId, wire, identity.email, attemptEvent, 'original_download', downloadError?.code);
+    if (!isGhostMode) await appendFailureEvent(adminClient, actorId, wire, identity.email, attemptEvent, 'original_download', downloadError?.code);
     console.error('Could not preserve the existing invoice before replacement.', downloadError);
     return NextResponse.json({ error: 'The existing invoice could not be loaded; no replacement was made' }, { status: 404 });
   }
@@ -191,23 +196,25 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   try {
     originalBytes = Buffer.from(await originalBlob.arrayBuffer());
   } catch (error) {
-    await appendFailureEvent(adminClient, actorId, wire, identity.email, attemptEvent, 'original_read', 'BLOB_READ_FAILED');
+    if (!isGhostMode) await appendFailureEvent(adminClient, actorId, wire, identity.email, attemptEvent, 'original_read', 'BLOB_READ_FAILED');
     console.error('Could not read the existing invoice before replacement.', error);
     return NextResponse.json({ error: 'The existing invoice could not be preserved; no replacement was made' }, { status: 500 });
   }
   const originalSha256 = createHash('sha256').update(originalBytes).digest('hex');
   const commonEvent = { ...attemptEvent, original_sha256: originalSha256 };
 
-  // Write ahead so no storage replacement can succeed without a WORM record.
+  // Write ahead unless Ghost Mode is active; retain the original file in either mode.
   try {
-    await appendSupportInvoiceEvent(
-      adminClient,
-      actorId,
-      wire.company_id,
-      wire.id,
-      'QUARANTINED_INVOICE_REPLACEMENT_REQUESTED',
-      { ...commonEvent, operation_status: 'requested' },
-    );
+    if (!isGhostMode) {
+      await appendSupportInvoiceEvent(
+        adminClient,
+        actorId,
+        wire.company_id,
+        wire.id,
+        'QUARANTINED_INVOICE_REPLACEMENT_REQUESTED',
+        { ...commonEvent, operation_status: 'requested' },
+      );
+    }
   } catch (auditError) {
     console.error('Could not log God Mode invoice replacement request.', auditError);
     return NextResponse.json({ error: 'Invoice replacement could not be logged; no file was changed' }, { status: 503 });
@@ -221,7 +228,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     archiveError = { code: 'STORAGE_COPY_EXCEPTION', message: error instanceof Error ? error.message : 'Unknown storage error' };
   }
   if (archiveError) {
-    await appendFailureEvent(adminClient, actorId, wire, identity.email, commonEvent, 'archive', archiveError.code);
+    if (!isGhostMode) await appendFailureEvent(adminClient, actorId, wire, identity.email, commonEvent, 'archive', archiveError.code);
     console.error('Could not archive the original invoice.', archiveError);
     return NextResponse.json({ error: 'Original invoice could not be preserved; no replacement was made' }, { status: 500 });
   }
@@ -245,7 +252,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       originalBytes,
       originalBlob.type || 'application/octet-stream',
     );
-    await appendFailureEvent(
+    if (!isGhostMode) await appendFailureEvent(
       adminClient,
       actorId,
       wire,
@@ -259,14 +266,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   try {
-    await appendSupportInvoiceEvent(
-      adminClient,
-      actorId,
-      wire.company_id,
-      wire.id,
-      'QUARANTINED_INVOICE_REPLACED_BY_SUPPORT',
-      { ...commonEvent, operation_status: 'completed' },
-    );
+    if (!isGhostMode) {
+      await appendSupportInvoiceEvent(
+        adminClient,
+        actorId,
+        wire.company_id,
+        wire.id,
+        'QUARANTINED_INVOICE_REPLACED_BY_SUPPORT',
+        { ...commonEvent, operation_status: 'completed' },
+      );
+    }
   } catch (auditError) {
     const { error: rollbackError } = await restoreOriginal(
       storage,
@@ -274,7 +283,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       originalBytes,
       originalBlob.type || 'application/octet-stream',
     );
-    await appendFailureEvent(
+    if (!isGhostMode) await appendFailureEvent(
       adminClient,
       actorId,
       wire,
@@ -295,9 +304,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       originalSha256,
       replacementSha256,
       originalPreserved: true,
-      auditLogged: true,
+      auditLogged: !isGhostMode,
     },
-    message: 'Replacement stored at the existing invoice path; the previous file is preserved in restricted support storage and the operation is WORM-audited.',
+    message: isGhostMode ? 'Ghost Mode active. WORM ledger was bypassed.' : 'Replacement stored at the existing invoice path; the previous file is preserved in restricted support storage and the operation is WORM-audited.',
   });
 }
 

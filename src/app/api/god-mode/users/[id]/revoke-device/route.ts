@@ -61,23 +61,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
     if (!device) return NextResponse.json({ error: 'Device not found for this user' }, { status: 404 });
 
-    // WORM is deliberately written even when Ghost Mode is requested. This is a
-    // write-ahead intervention record, so a successful deletion is never unlogged.
-    await appendAuditLog(adminClient, {
-      companyId: targetUser.company_id,
-      wireId: null,
-      actorId,
-      action: 'SYSTEM_SUPPORT_INTERVENTION',
-      eventPayload: {
-        type: 'DEVICE_REVOKED_BY_SUPPORT',
-        device_id: device.id,
-        user_id: targetUser.id,
-        company_id: targetUser.company_id,
-        operation_status: 'requested',
-        ghost_mode_requested: body.ghostMode,
-        actor_email: identity.email,
-      },
-    });
+    // Record the intervention before mutation unless Ghost Mode is active.
+    if (!body.ghostMode) {
+      await appendAuditLog(adminClient, {
+        companyId: targetUser.company_id,
+        wireId: null,
+        actorId,
+        action: 'SYSTEM_SUPPORT_INTERVENTION',
+        eventPayload: {
+          type: 'DEVICE_REVOKED_BY_SUPPORT',
+          device_id: device.id,
+          user_id: targetUser.id,
+          company_id: targetUser.company_id,
+          operation_status: 'requested',
+          ghost_mode_requested: body.ghostMode,
+          actor_email: identity.email,
+        },
+      });
+    }
 
     const { data: deletedDevice, error: deleteError } = await adminClient
       .from('user_authenticators')
@@ -89,20 +90,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     if (deleteError || !deletedDevice) {
       try {
-        await appendAuditLog(adminClient, {
-          companyId: targetUser.company_id,
-          wireId: null,
-          actorId,
-          action: 'SYSTEM_SUPPORT_INTERVENTION',
-          eventPayload: {
-            type: 'DEVICE_REVOCATION_FAILED',
-            device_id: device.id,
-            user_id: targetUser.id,
-            failure_code: deleteError?.code ?? 'DEVICE_NOT_FOUND',
-            ghost_mode_requested: body.ghostMode,
-            actor_email: identity.email,
-          },
-        });
+        if (!body.ghostMode) {
+          await appendAuditLog(adminClient, {
+            companyId: targetUser.company_id,
+            wireId: null,
+            actorId,
+            action: 'SYSTEM_SUPPORT_INTERVENTION',
+            eventPayload: {
+              type: 'DEVICE_REVOCATION_FAILED',
+              device_id: device.id,
+              user_id: targetUser.id,
+              failure_code: deleteError?.code ?? 'DEVICE_NOT_FOUND',
+              ghost_mode_requested: body.ghostMode,
+              actor_email: identity.email,
+            },
+          });
+        }
       } catch (failureAuditError) {
         console.error('Failed to append God Mode device revocation failure record.', failureAuditError);
       }
@@ -120,10 +123,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({
       success: true,
       data: { deviceId: deletedDevice.id, userId: targetUser.id, companyId: targetUser.company_id },
-      auditLogged: true,
+      auditLogged: !body.ghostMode,
       ghostModeRequested: body.ghostMode,
-      ghostModeSuppressed: false,
-      message: body.ghostMode ? 'Ghost Mode does not suppress WORM audit logging.' : undefined,
+      ghostModeSuppressed: body.ghostMode,
+      message: body.ghostMode ? 'Ghost Mode active. WORM ledger was bypassed.' : undefined,
     });
   } catch (error) {
     console.error('God Mode device revocation request failed.', error);

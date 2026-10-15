@@ -41,7 +41,7 @@ export default function PrivacyRequestForm({ privacyEmail }: { privacyEmail?: st
       <div role="status" aria-live="polite" className="rounded-xl border border-[#c4d5c4] bg-[#eff3ed] p-5 text-[#203329]">
         <h2 className="font-semibold">Request recorded</h2>
         <p className="mt-2 text-sm leading-6">
-          A deletion-review request was added to your workspace audit history. Nothing has been deleted, and this demo does not automatically notify or process the request. Follow up with your workspace administrator.
+          A deletion-review request was added to your workspace audit history. Nothing has been deleted, and this build does not automatically notify or process the request. Follow up with your workspace administrator.
         </p>
         {privacyEmail && <p className="mt-3 text-sm">You may also contact the configured privacy contact: <a className="font-semibold underline underline-offset-4" href={`mailto:${privacyEmail}`}>{privacyEmail}</a>.</p>}
       </div>

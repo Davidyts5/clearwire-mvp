@@ -1,126 +1,86 @@
-"use client";
-import { useState, useEffect, useMemo } from "react";
-import { ShieldCheck, Loader2, AlertTriangle, Activity, Settings, PlayCircle, Briefcase } from "lucide-react";
-import Link from "next/link";
-import DataFilters, { FilterConfig } from "@/components/DataFilters";
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { AlertTriangle, Download, Loader2, ShieldCheck } from 'lucide-react';
+import { exceptionsToCsv, type ComplianceException } from '@/lib/compliance-exceptions';
 
 export default function AuditorDashboard() {
-  const [data, setData] = useState<any>({ stats: null, investigations: [] });
+  const [exceptions, setExceptions] = useState<ComplianceException[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filteredInvestigations, setFilteredInvestigations] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
-    const fetchAuditData = async () => {
-      try {
-        const cacheBuster = new Date().getTime();
-        const res = await fetch(`/api/audit/master?t=${cacheBuster}`, { cache: 'no-store' });
-        const json = await res.json();
-        if (json.success) {
-          setData(json);
-          setFilteredInvestigations(json.investigations || []);
-        }
-      } catch (err) {} finally { setIsLoading(false); }
-    };
-    fetchAuditData();
-  }, []);
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(null);
+    fetch('/api/audit/exceptions', { cache: 'no-store', signal: controller.signal })
+      .then(async response => {
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || 'Unable to load exceptions.');
+        setExceptions(result.data);
+      })
+      .catch(err => {
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Unable to load exceptions.');
+      })
+      .finally(() => { if (!controller.signal.aborted) setIsLoading(false); });
+    return () => controller.abort();
+  }, [reload]);
 
-  const avgResolutionHours = useMemo(() => {
-    if (!data.investigations) return 'N/A';
-    const resolved = data.investigations.filter((i: any) => i.status === 'resolved' && i.resolved_at && i.date);
-    if (resolved.length === 0) return 'N/A';
-    
-    const totalMs = resolved.reduce((acc: number, curr: any) => {
-      return acc + (new Date(curr.resolved_at).getTime() - new Date(curr.date).getTime());
-    }, 0);
-    const avgMs = totalMs / resolved.length;
-    const hours = avgMs / (1000 * 60 * 60);
-    return hours < 24 ? `${hours.toFixed(1)} hrs` : `${(hours / 24).toFixed(1)} days`;
-  }, [data.investigations]);
-
-  const filterConfig: FilterConfig = {
-    searchPlaceholder: "Search cases by title or ID...",
-    searchKeys: ['title', 'case_number'],
-    statuses: [
-      { label: 'Open', value: 'open' },
-      { label: 'Under Review', value: 'under_review' },
-      { label: 'Escalated', value: 'escalated' },
-      { label: 'Resolved', value: 'resolved' }
-    ],
-    sortOptions: [
-      { label: 'Newest First', value: 'newest' },
-      { label: 'Oldest First', value: 'oldest' },
-      { label: 'Highest Risk', value: 'highest_risk' }
-    ]
-  };
-
-  const getAgeBorderClass = (inv: any) => {
-    if (inv.status === 'resolved') return 'border-l-4 border-l-transparent';
-    const ageHours = (Date.now() - new Date(inv.date).getTime()) / (1000 * 60 * 60);
-    if (ageHours > 72) return 'border-l-4 border-l-red-500';
-    if (ageHours > 24) return 'border-l-4 border-l-amber-500';
-    return 'border-l-4 border-l-transparent';
-  };
-
-  if (isLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
+  function exportCsv() {
+    const url = URL.createObjectURL(new Blob([exceptionsToCsv(exceptions)], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `clearwire-exceptions-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 pb-20 sm:px-6 lg:px-8">
+      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <div className="flex items-center gap-2 text-blue-600 mb-2 font-bold uppercase tracking-wider text-xs">
-            <ShieldCheck size={16} /> Auditor Dashboard
+          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-600"><ShieldCheck size={16} /> Compliance Hub</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Exceptions &amp; Anomalies</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">Focus on approved high-risk wires and wires created within seven days of an approved vendor change.</p>
+        </div>
+        <button onClick={exportCsv} disabled={isLoading || !!error || exceptions.length === 0} className="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+          <Download size={16} /> Export Exceptions (CSV)
+        </button>
+      </header>
+
+      <section aria-label="Compliance exceptions" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4 text-sm font-semibold text-slate-700">
+          <AlertTriangle size={17} className="text-red-600" />
+          {isLoading ? 'Loading exceptions…' : error ? 'Exceptions unavailable' : `${exceptions.length} ${exceptions.length === 1 ? 'wire' : 'wires'} to review`}
+        </div>
+        {isLoading ? (
+          <div role="status" className="flex items-center justify-center gap-2 p-16 text-slate-500"><Loader2 className="animate-spin" size={20} /> Loading exceptions…</div>
+        ) : error ? (
+          <div role="alert" className="space-y-3 p-10 text-center text-red-700"><p>{error}</p><button onClick={() => setReload(value => value + 1)} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold">Try again</button></div>
+        ) : exceptions.length === 0 ? (
+          <div className="p-16 text-center"><ShieldCheck className="mx-auto mb-3 text-emerald-600" size={28} /><h2 className="font-semibold text-slate-900">No exceptions found</h2><p className="mt-1 text-sm text-slate-500">No wires currently meet either exception criterion.</p></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>{['Wire ID', 'Vendor', 'Amount', 'Date', 'Exception'].map(label => <th key={label} scope="col" className="px-5 py-3 font-semibold">{label}</th>)}</tr></thead>
+              <tbody className="divide-y divide-slate-100">{exceptions.map(wire => (
+                <tr key={wire.id} className="align-top hover:bg-slate-50/60">
+                  <td className="px-5 py-4"><Link className="font-mono text-xs text-blue-700 underline decoration-blue-200 underline-offset-4" href={`/auditor-dashboard/ledger?wireId=${encodeURIComponent(wire.id)}`}>{wire.id}</Link></td>
+                  <td className="px-5 py-4 font-medium text-slate-900">{wire.vendor_name_snapshot || 'Unknown vendor'}</td>
+                  <td className="whitespace-nowrap px-5 py-4 tabular-nums text-slate-700">{Number(wire.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {wire.currency}</td>
+                  <td className="whitespace-nowrap px-5 py-4 text-slate-500"><time dateTime={wire.created_at} title={new Date(wire.created_at).toLocaleString()}>{new Date(wire.created_at).toLocaleDateString()}</time></td>
+                  <td className="min-w-[280px] space-y-2 px-5 py-4">{wire.reasons.map(reason => <span key={reason} className="block w-fit rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">{reason}</span>)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Active Cases</h1>
-          <p className="text-slate-500 mt-1">Manage fraud cases and automated risk workflows.</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-red-50 text-red-600 rounded-lg"><AlertTriangle size={24}/></div>
-          <div><p className="text-sm font-bold text-slate-500 uppercase">Active Cases</p><p className="text-2xl font-bold text-slate-900">{data.stats?.openInvestigations || 0}</p></div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-slate-100 text-slate-600 rounded-lg"><Briefcase size={24}/></div>
-          <div><p className="text-sm font-bold text-slate-500 uppercase">Total Logged Cases</p><p className="text-2xl font-bold text-slate-900">{data.stats?.totalInvestigations || 0}</p></div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg"><Settings size={24}/></div>
-          <div><p className="text-sm font-bold text-slate-500 uppercase">Policy Changes</p><p className="text-2xl font-bold text-slate-900">{data.stats?.policyChanges || 0}</p></div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Activity size={24}/></div>
-          <div><p className="text-sm font-bold text-slate-500 uppercase">Avg. Resolution</p><p className="text-2xl font-bold text-slate-900">{avgResolutionHours}</p></div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
-        <div className="p-4 border-b border-slate-100 bg-slate-50">
-          <h2 className="font-bold text-slate-900 flex items-center gap-2"><Briefcase size={18} className="text-slate-600"/> Case Queue</h2>
-        </div>
-        
-        <div className="p-4 border-b border-slate-100 bg-white">
-          <DataFilters data={data.investigations} config={filterConfig} onFilterChange={setFilteredInvestigations} />
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-4 space-y-3 bg-slate-50">
-          {filteredInvestigations.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm">No cases match filters.</div>
-          ) : filteredInvestigations.map((inv: any) => (
-            <Link href={`/auditor-dashboard/investigations/${inv.id}`} key={inv.id} className={`block bg-white p-4 rounded-lg border border-slate-200 shadow-sm hover:border-blue-400 transition-colors ${getAgeBorderClass(inv)}`}>
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-[10px] font-bold text-slate-500 font-mono">{inv.case_number}</span>
-                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${inv.status === 'resolved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700 border border-red-200'}`}>{inv.status.replace('_', ' ')}</span>
-              </div>
-              <h3 className="font-bold text-slate-900 text-sm mb-1">{inv.title}</h3>
-              <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100">
-                <span className="text-[10px] font-medium text-slate-400">{new Date(inv.date).toLocaleDateString()}</span>
-                <span className="text-xs font-bold text-blue-600 flex items-center gap-1">Open Case <PlayCircle size={14}/></span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
+        )}
+      </section>
+      <p className="text-xs text-slate-500">Review signals, not fraud findings. High risk means a score of 70 or above. Vendor changes are matched by approval time before wire creation, regardless of wire status.</p>
     </div>
   );
 }
