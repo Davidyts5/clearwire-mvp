@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import PolicyDocument from '@/components/PolicyDocument';
+import { POLICY_UPDATED_ON } from '@/lib/legal';
 
 export const metadata: Metadata = {
   title: 'Third-party notices | ClearWire',
-  description: 'Third-party asset and service inventory for the ClearWire demo.',
+  description: 'Third-party asset and service inventory for the ClearWire early-access pilot.',
 };
 
 export default function ThirdPartyNoticesPage() {
@@ -13,14 +14,14 @@ export default function ThirdPartyNoticesPage() {
       description="A short inventory of external services and visual assets identified in the current repository review."
     >
       <p className="rounded-lg border border-[#d7c8a9] bg-[#fbf7ed] p-4 text-sm leading-6 text-[#594d3e]">
-        This inventory was prepared from the checked-in app code and package manifest on 12 October 2026. It is not a complete software bill of materials; review the lockfile and deployed configuration before release.
+        This inventory was prepared from the checked-in app code and package manifest on {POLICY_UPDATED_ON}. It is not a complete software bill of materials; review the lockfile and deployed configuration before a customer pilot.
       </p>
 
       <section aria-labelledby="third-party-assets">
         <h2 id="third-party-assets" className="text-xl font-semibold text-[#203329]">Visual assets</h2>
         <ul className="mt-3 list-disc space-y-3 pl-6 marker:text-[#66896a]">
           <li><strong>Lucide React icons:</strong> the app imports icons from <code>lucide-react</code> (ISC license). See the package’s license and upstream project at <a className="font-semibold text-[#315741] underline underline-offset-4" href="https://github.com/lucide-icons/lucide/blob/main/LICENSE">Lucide’s license file</a>.</li>
-          <li><strong>Inter typeface:</strong> the app requests Inter through Next.js <code>next/font/google</code>. Inter is distributed under the SIL Open Font License 1.1; see the <a className="font-semibold text-[#315741] underline underline-offset-4" href="https://github.com/google/fonts/tree/main/ofl/inter">upstream Inter font directory</a> for its notice.</li>
+          <li><strong>Inter typeface:</strong> the app obtains Inter at build time through Next.js <code>next/font/google</code>. Generated font assets are served with the app. Inter is distributed under the SIL Open Font License 1.1; see the <a className="font-semibold text-[#315741] underline underline-offset-4" href="https://github.com/google/fonts/tree/main/ofl/inter">upstream Inter font directory</a> for its notice.</li>
           <li><strong>Images:</strong> no third-party stock-image files were found in the current <code>public</code> asset directory. The landing-page payment screen is an HTML/CSS illustration, labeled illustrative, and is not a customer record.</li>
         </ul>
       </section>
