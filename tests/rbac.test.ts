@@ -1,23 +1,25 @@
-// JEST TEST SUITE FOR RBAC & TENANT ISOLATION
+// Run with the shared Node test runner; no Jest globals or extra dependency needed.
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { Permissions, ROLES } from '../src/lib/roles';
 
 describe('RBAC Rules', () => {
   it('allows ONLY clerks to create wires', () => {
-    expect(Permissions.canCreateWire(ROLES.CLERK)).toBe(true);
-    expect(Permissions.canCreateWire(ROLES.CONTROLLER)).toBe(false);
-    expect(Permissions.canCreateWire(ROLES.CFO)).toBe(false);
-    expect(Permissions.canCreateWire(ROLES.AUDITOR)).toBe(false);
+    assert.equal(Permissions.canCreateWire(ROLES.CLERK), true);
+    assert.equal(Permissions.canCreateWire(ROLES.CONTROLLER), false);
+    assert.equal(Permissions.canCreateWire(ROLES.CFO), false);
+    assert.equal(Permissions.canCreateWire(ROLES.AUDITOR), false);
   });
 
   it('allows controllers and cfos to approve', () => {
-    expect(Permissions.canApproveWire(ROLES.CONTROLLER)).toBe(true);
-    expect(Permissions.canApproveWire(ROLES.CFO)).toBe(true);
-    expect(Permissions.canApproveWire(ROLES.CLERK)).toBe(false);
-    expect(Permissions.canApproveWire(ROLES.AUDITOR)).toBe(false);
+    assert.equal(Permissions.canApproveWire(ROLES.CONTROLLER), true);
+    assert.equal(Permissions.canApproveWire(ROLES.CFO), true);
+    assert.equal(Permissions.canApproveWire(ROLES.CLERK), false);
+    assert.equal(Permissions.canApproveWire(ROLES.AUDITOR), false);
   });
 
   it('routes correctly', () => {
-    expect(Permissions.getPortalRoute(ROLES.CLERK)).toBe('/clerk-dashboard');
-    expect(Permissions.getPortalRoute(ROLES.CFO)).toBe('/cfo-dashboard');
+    assert.equal(Permissions.getPortalRoute(ROLES.CLERK), '/clerk-dashboard');
+    assert.equal(Permissions.getPortalRoute(ROLES.CFO), '/cfo-dashboard');
   });
 });

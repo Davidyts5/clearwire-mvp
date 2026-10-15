@@ -8,8 +8,11 @@ const REMINDER_THRESHOLD_HOURS = 4;
 const ESCALATION_THRESHOLD_HOURS = 24;
 
 export async function GET(req: Request) {
+  const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Fail closed when cron authentication is not configured. Never accept the
+  // literal "Bearer undefined" as a valid credential for the service-role job.
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
