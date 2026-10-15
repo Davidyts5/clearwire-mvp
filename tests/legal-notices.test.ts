@@ -28,9 +28,9 @@ function renderPolicy(page: string, env: Record<string, string> = {}) {
 }
 
 test('current pilot notices share a new dated version; the prior source text is preserved', () => {
-  assert.equal(legal.TERMS_VERSION, '2026-10-15');
+  assert.equal(legal.TERMS_VERSION, '2026-10-15.1');
   assert.equal(legal.PRIVACY_NOTICE_VERSION, legal.TERMS_VERSION);
-  assert.equal(legal.COOKIE_NOTICE_VERSION, legal.TERMS_VERSION);
+  assert.equal(legal.COOKIE_NOTICE_VERSION, '2026-10-15');
   assert.equal(legal.POLICY_UPDATED_ON, '15 October 2026');
   const archive = readFileSync('docs/legal/archive/2026-10-12.html', 'utf8');
   assert.match(archive, /2026-10-12/);
@@ -66,8 +66,8 @@ test('operator details use configured values without inventing or rendering inje
 test('terms disclose pilot/live-data, billing, access, support-log and acceptance limitations', () => {
   const html = renderPolicy('terms');
   for (const text of [
-    'fictional or properly anonymized', 'not yet enforced', 'Ghost Mode',
-    'bypass the workspace WORM audit ledger', 'does not automatically renew',
+    'fictional or properly anonymized', 'not yet enforced', 'operator-only tools',
+    'may not include every operator support action', 'does not automatically renew',
     'no integrated checkout', 'no automatic reacceptance workflow',
     'does not hold funds', 'do not set a monetary liability cap',
   ]) assert.ok(html.includes(text), `Missing disclosure: ${text}`);
@@ -76,7 +76,7 @@ test('terms disclose pilot/live-data, billing, access, support-log and acceptanc
 test('privacy notice covers support archives, provider uncertainty and the real request behavior', () => {
   const html = renderPolicy('privacy');
   for (const text of [
-    'Supabase', 'Resend', 'Twilio', 'Ghost Mode', 'prior invoice',
+    'Supabase', 'Resend', 'Twilio', 'operator-only tools', 'prior invoice',
     'not a data-processing agreement', 'no automatic retention schedule',
     'does not delete data, send an email, open a processing queue, or notify the operator',
     'not yet a complete public privacy-request channel', 'hosting regions',
@@ -166,3 +166,14 @@ test('privacy requests record the current notice version and do not implement de
   assert.equal(invalid.status, 400);
   assert.equal(events.length, 1);
 });
+
+for (const page of ['terms', 'privacy']) {
+  test(`${page}: explains off-platform payments without branding internal operator tools`, () => {
+    const html = renderPolicy(page);
+    assert.match(html, /not connected to your bank/);
+    assert.match(html, /payments.*outside/i);
+    assert.match(html, /accounts-payable/i);
+    assert.match(html, /may not include every operator support action/);
+    assert.doesNotMatch(html, /Ghost Mode|God Mode|WORM/);
+  });
+}

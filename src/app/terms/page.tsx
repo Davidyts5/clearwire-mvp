@@ -20,7 +20,7 @@ export default function TermsPage() {
       <section aria-labelledby="terms-scope">
         <h2 id="terms-scope" className="text-xl font-semibold text-[#203329]">1. The service and your agreement</h2>
         <p className="mt-3">ClearWire helps a business collect wire requests, review vendor changes, apply internal approval rules, and examine exceptions and recorded activity. These terms apply to the organization participating in the pilot and its authorized adult users. If you accept for an organization, you must have authority to do so.</p>
-        <p className="mt-3">ClearWire is not a bank or payment provider. It does not hold funds, connect to your bank to execute a transfer, or initiate or release payments. An app approval is an internal workflow record, not a bank instruction or confirmation that money has moved. The service is not legal, accounting, investment, or regulatory advice.</p>
+        <p className="mt-3">ClearWire is an internal request-and-approval tool, not a bank or payment provider. It is not connected to your bank and does not hold funds or initiate, release, block or reverse payments. An app approval is an internal workflow record, not a bank instruction or confirmation that money has moved. The service is not legal, accounting, investment, or regulatory advice.</p>
       </section>
 
       <section aria-labelledby="terms-pilot">
@@ -38,14 +38,15 @@ export default function TermsPage() {
 
       <section aria-labelledby="terms-decisions">
         <h2 id="terms-decisions" className="text-xl font-semibold text-[#203329]">4. Human decisions and product limitations</h2>
+        <p className="mt-3">An accounts-payable user or anyone with access to your banking systems may still make a payment outside ClearWire, even if a request has not been approved or has been rejected in the app. ClearWire cannot prevent that bypass or automatically detect off-platform payments. Your organization remains responsible for bank access permissions, bank-side approval requirements, payment execution and reconciliation.</p>
         <p className="mt-3">Risk scores, exception badges and vendor-change signals help prioritize review. They can be incorrect, incomplete, or absent and are not findings of fraud. Human reviewers remain responsible for decisions and for following their organization’s banking and approval procedures.</p>
         <p className="mt-3">Passkeys authenticate an app action; they do not establish that a vendor or invoice is genuine. Reports and audit-chain checks are not independent certifications of security, regulatory compliance, or the completeness of business activity. ClearWire does not guarantee prevention of fraud, recovery of funds, or any particular financial outcome.</p>
       </section>
 
       <section aria-labelledby="terms-support">
         <h2 id="terms-support" className="text-xl font-semibold text-[#203329]">5. Support access and history limitations</h2>
-        <p className="mt-3">Privileged support features can inspect workspace records and invoices, correct vendor details, replace invoices while preserving prior files in restricted support storage, override wire states, change workspace settings, and revoke devices. Agree permitted support access and correction procedures in the pilot plan.</p>
-        <p className="mt-3">The current build includes a privileged support option called Ghost Mode. When enabled, the affected support actions bypass the workspace WORM audit ledger and do not appear in customer-visible history. A valid audit chain therefore does not establish that every intervention was recorded. Do not use this pilot where a complete, immutable record of all administrative changes is required; agree an appropriate configuration and controls before live use.</p>
+        <p className="mt-3">Authorized ClearWire operators may access workspace records and invoices to provide support, correct app records, manage workspace settings and revoke app-device access. Replacing an invoice can preserve its prior version in restricted support storage. These operator-only tools are not customer or workspace-administrator features and do not provide access to your bank. Agree permitted support access and correction procedures in the pilot plan.</p>
+        <p className="mt-3">Customer-visible history records app workflow activity but may not include every operator support action. It is not a complete bank-transaction record or a complete record of all administrative access and changes. Do not rely on it as your sole payment or compliance record; agree any additional recordkeeping requirements before live use.</p>
       </section>
 
       <section aria-labelledby="terms-fees">

@@ -4,12 +4,12 @@ Draft pack dated **15 October 2026**. This is an implementation checklist, not l
 
 ## What changed
 
-- `/terms`: early-access evaluation scope; authority to participate; permitted data; human payment controls; support access and Ghost Mode; written fees/refunds/renewal terms; pilot-end exports/deletion; privacy and version acknowledgement.
+- `/terms`: early-access evaluation scope; authority to participate; permitted data; human payment controls; operator-only support access and customer-history limits; written fees/refunds/renewal terms; pilot-end exports/deletion; privacy and version acknowledgement.
 - `/privacy`: data sources and purposes; workspace and support access; provider integrations and location uncertainty; retention gaps; statutory-rights requests; clear limits on the deletion form.
 - `/cookies`: expected Supabase cookie patterns, refreshable lifetimes, memory-only banner dismissal, browser controls, and no invented cookie-consent functionality.
 - Data-request copy, third-party notices, operator notice and cookie banner are aligned with the pilot language.
-- Terms/privacy/cookie versions are now `2026-10-15`. Existing signup/invitation acceptance events and privacy-request events use the shared constants. Historical audit records are not rewritten.
-- Previous notice text is preserved in `archive/2026-10-12.html`. That archive is a source-text snapshot, not a record of the operator details used in any particular deployment or proof of a user's acceptance.
+- Terms/privacy versions are now `2026-10-15.1`; the unchanged cookie notice remains `2026-10-15`. Existing signup/invitation acceptance events and privacy-request events use the shared constants. Historical audit records are not rewritten.
+- Previous notice text is preserved in `archive/2026-10-12.html` and `archive/2026-10-15.html`. That archive is a source-text snapshot, not a record of the operator details used in any particular deployment or proof of a user's acceptance.
 
 ## 1. Identify the actual business — currently missing
 
@@ -29,9 +29,10 @@ Have the operator and participating organization agree:
 
 - Legal parties and authorized signatories.
 - Pilot start/end dates, evaluation goals, authorized users and features.
+- Bank-side access controls, payment approval requirements and reconciliation: ClearWire is not connected to a bank and cannot stop AP staff from paying outside its workflow.
 - Approved data categories: start with fictional/properly anonymized data. Live data requires explicit approval after security review and necessary data-processing terms.
 - Onboarding/support contact, support hours, authorized support actions, and how corrections are approved.
-- Whether privileged Ghost Mode must be disabled or replaced with a fully logged workflow for the customer. The current feature skips affected support audit events; disclosure alone does not make it suitable for a regulated or complete-audit requirement.
+- Whether operator support interventions must be fully logged for the agreed pilot. Internal operator tools are not customer features; customer-visible history does not include every support action. Disclosure alone does not satisfy a complete-audit requirement.
 - Fees (if any), currency, taxes, invoicing, due dates, cancellation and refunds. Do not assume the prior suggested pilot price has been agreed.
 - No automatic paid conversion or renewal unless separately agreed.
 - Suspension/termination, available exports, return/deletion of records, preserved invoice originals, logs and backups.
