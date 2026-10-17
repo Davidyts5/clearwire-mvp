@@ -7,6 +7,7 @@ import ts from 'typescript';
 import { NextResponse } from 'next/server';
 import { ROLES } from '../src/lib/roles';
 import * as exceptions from '../src/lib/compliance-exceptions';
+import { loadSource } from './helpers/load-source';
 
 // Transpile the real route and substitute only external auth/storage/database dependencies.
 function loadRoute(path: string, dependencies: Record<string, unknown>) {
@@ -143,21 +144,40 @@ for (const ghostMode of [false, true]) {
   }
 }
 
-test('exceptions API scopes every page by tenant, restricts roles, preserves CFO quarantine and pages beyond 500 rows', async () => {
+test('exceptions API queries only schema-backed columns, scopes every page by tenant, restricts roles, preserves CFO quarantine and pages beyond 500 rows', async () => {
+  // Derive columns from the checked-in DDL, not from the route's projection.
+  const columnsFrom = (path: string, table: string) => {
+    const ddl = readFileSync(path, 'utf8');
+    const block = ddl.match(new RegExp(`CREATE TABLE (?:IF NOT EXISTS )?${table} \\(([\\s\\S]*?)\\n\\);`));
+    assert.ok(block, `Missing schema for ${table}`);
+    return new Set(Array.from(block[1].matchAll(/^  (\w+)\s/gm), match => match[1]));
+  };
+  const wireColumns = columnsFrom('src/lib/schema.sql', 'wire_requests');
+  const quarantine = readFileSync('src/lib/schema-v37-god-mode.sql', 'utf8');
+  assert.match(quarantine, /ALTER TABLE public.wire_requests\s+ADD COLUMN IF NOT EXISTS visible_after/i);
+  wireColumns.add('visible_after');
+  const schema: Record<string, Set<string>> = {
+    wire_requests: wireColumns,
+    vendor_change_requests: columnsFrom('src/lib/schema-v13-vendor-workflow.sql', 'vendor_change_requests'),
+  };
   for (const role of [ROLES.CFO, ROLES.AUDITOR]) {
     const queries: any[] = [];
     let allowedRoles: string[] = [];
     const supabase = { from(table: string) {
       const trace: any = { table, filters: [] };
       queries.push(trace);
+      function checkColumn(column: string) {
+        assert.ok(schema[table]?.has(column), `42703: column ${table}.${column} does not exist`);
+      }
       const query: any = {
-        select() { return query; }, order() { return query; },
-        eq(...args: any[]) { trace.filters.push(['eq', ...args]); return query; },
-        lte(...args: any[]) { trace.filters.push(['lte', ...args]); return query; },
-        gte(...args: any[]) { trace.filters.push(['gte', ...args]); return query; },
+        select(fields: string) { fields.split(',').map(field => field.trim()).forEach(checkColumn); return query; },
+        order(column: string) { checkColumn(column); return query; },
+        eq(...args: any[]) { checkColumn(args[0]); trace.filters.push(['eq', ...args]); return query; },
+        lte(...args: any[]) { checkColumn(args[0]); trace.filters.push(['lte', ...args]); return query; },
+        gte(...args: any[]) { checkColumn(args[0]); trace.filters.push(['gte', ...args]); return query; },
         range(start: number) {
           trace.start = start;
-          return Promise.resolve({ error: null, data: table === 'wire_requests' && start === 0 ? Array.from({ length: 500 }, (_, n) => ({ id: `wire-${n}`, vendor_id: null, vendor_name_snapshot: 'Acme', status: 'approved', risk_score: 70, created_at: '2026-10-01T00:00:00Z', amount: 100, currency: 'USD' })) : [] });
+          return Promise.resolve({ error: null, data: table === 'wire_requests' && start === 0 ? Array.from({ length: 500 }, (_, n) => ({ id: `wire-${n}`, vendor_id: null, vendor_name_snapshot: 'Acme', status: 'approved', risk_score: 70, created_at: '2026-10-01T00:00:00Z', amount: 100 })) : [] });
         },
       };
       return query;
@@ -168,7 +188,10 @@ test('exceptions API scopes every page by tenant, restricts roles, preserves CFO
     });
     const response = await route.GET(new Request('https://example.invalid/api'));
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).data.length, 500);
+    const result = await response.json();
+    assert.equal(result.data.length, 500);
+    assert.equal(result.data[0].amount, 100);
+    assert.equal('currency' in result.data[0], false);
     assert.deepEqual(Array.from(allowedRoles), [ROLES.AUDITOR, ROLES.CFO]);
     assert.equal(queries.filter(q => q.table === 'wire_requests').length, 2);
     for (const query of queries) {
@@ -194,3 +217,32 @@ test('exceptions API reports data failures instead of a misleading empty dashboa
   assert.equal(result.success, undefined);
   assert.doesNotMatch(result.error, /private database detail/);
 });
+
+for (const scenario of [
+  { name: 'missing session', user: null, profile: null, status: 401 },
+  { name: 'missing tenant', user: { id }, profile: { role: ROLES.AUDITOR }, status: 403 },
+  ...[ROLES.CLERK, ROLES.CONTROLLER, 'god_mode'].map(role => ({
+    name: role, user: { id }, profile: { company_id: companyId, role }, status: 403,
+  })),
+]) {
+  test(`exceptions API real auth rejects ${scenario.name} before querying wires`, async () => {
+    const supabase = {
+      auth: { getUser: async () => ({ data: { user: scenario.user }, error: null }) },
+      from(table: string) {
+        assert.equal(table, 'users', 'Unauthorized requests must not query exception data');
+        const query = {
+          select() { return query; }, eq() { return query; },
+          single: async () => ({ data: scenario.profile, error: null }),
+        };
+        return query;
+      },
+    };
+    const auth = loadSource('src/lib/api-auth.ts', {
+      '@/lib/supabase/server': { createClient: () => supabase }, '@/lib/roles': { ROLES },
+    });
+    const route = loadRoute('src/app/api/audit/exceptions/route.ts', {
+      '@/lib/api-auth': auth, '@/lib/roles': { ROLES }, '@/lib/compliance-exceptions': exceptions,
+    });
+    assert.equal((await route.GET(new Request('https://example.invalid/api'), {})).status, scenario.status);
+  });
+}

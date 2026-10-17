@@ -95,8 +95,8 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile Header & Toggle */}
-      <div className="md:hidden flex items-center justify-between bg-slate-900 p-4 h-[73px] sticky top-0 z-50 border-b border-slate-800">
+      {/* Keep the mobile header in normal flow so it cannot cover page headings on scroll. */}
+      <div className="md:hidden flex items-center justify-between bg-slate-900 p-4 h-[73px] shrink-0 relative z-50 border-b border-slate-800">
         <div className="flex items-center gap-2 font-bold text-lg text-white">
           <ShieldCheck className="text-blue-400" size={24} />
           ClearWire

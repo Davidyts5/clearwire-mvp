@@ -1,9 +1,10 @@
+import Decimal from 'decimal.js';
+
 export type ExceptionWire = {
   id: string;
   vendor_id: string | null;
   vendor_name_snapshot: string | null;
   amount: number | string;
-  currency: string | null;
   created_at: string;
   risk_score: number | null;
   status: string;
@@ -47,6 +48,11 @@ export function findComplianceExceptions(
   });
 }
 
+/** Wire amounts have scale 2; do not infer currency from mutable vendor metadata. */
+export function formatExceptionAmount(amount: ExceptionWire['amount']): string {
+  return new Decimal(amount).toFixed(2);
+}
+
 function csvCell(value: unknown): string {
   let text = String(value ?? '');
   // Prevent spreadsheet formula execution, including leading whitespace tricks.
@@ -56,10 +62,10 @@ function csvCell(value: unknown): string {
 
 export function exceptionsToCsv(exceptions: ComplianceException[]): string {
   const rows = [
-    ['Wire ID', 'Vendor', 'Amount', 'Currency', 'Date (UTC)', 'Exception reasons'],
+    ['Wire ID', 'Vendor', 'Amount', 'Date (UTC)', 'Exception reasons'],
     ...exceptions.map(wire => [
-      wire.id, wire.vendor_name_snapshot || 'Unknown vendor', wire.amount,
-      wire.currency || '', wire.created_at, wire.reasons.join('; '),
+      wire.id, wire.vendor_name_snapshot || 'Unknown vendor', formatExceptionAmount(wire.amount),
+      wire.created_at, wire.reasons.join('; '),
     ]),
   ];
   return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
