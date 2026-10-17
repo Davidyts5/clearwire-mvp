@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findComplianceExceptions, exceptionsToCsv, type ExceptionWire } from '../src/lib/compliance-exceptions';
+import { findComplianceExceptions, exceptionsToCsv, formatExceptionAmount, type ExceptionWire } from '../src/lib/compliance-exceptions';
 import { auditCategory, describeAuditEvent } from '../src/lib/audit-story';
 
 const wire: ExceptionWire = {
   id: 'wire-1', vendor_id: 'vendor-1', vendor_name_snapshot: 'Acme', amount: '1200.50',
-  currency: 'USD', created_at: '2026-10-14T12:00:00Z', status: 'approved', risk_score: 70,
+  created_at: '2026-10-14T12:00:00Z', status: 'approved', risk_score: 70,
 };
 
 test('high risk requires both score >= 70 and approved status', () => {
@@ -42,7 +42,8 @@ test('CSV includes displayed rows and reasons, escapes quotes/newlines and block
   const csv = exceptionsToCsv(result);
   assert.ok(csv.startsWith('\uFEFF"Wire ID"'));
   assert.ok(csv.includes('"Acme, ""Ltd""\nNorth"'));
-  assert.ok(csv.includes('"1200.50","USD"'));
+  assert.ok(csv.includes('"1200.50","2026-10-14T12:00:00Z"'));
+  assert.doesNotMatch(csv, /Currency|USD|undefined|null/);
   assert.ok(csv.includes('High-risk wire approved (risk score 70)'));
   for (const vendor of ['=1+1', '+SUM(A1)', '-1+2', '@SUM(A1)', '  =1+1', '\t=1+1']) {
     assert.ok(exceptionsToCsv([{ ...result[0], vendor_name_snapshot: vendor }]).includes(`"'${vendor}"`));
@@ -81,4 +82,26 @@ test('invite-only copy and simplified history remain in the default UI', async (
     assert.ok(source.includes('describeAuditEvent(log)') || source.includes('describeAuditEvent(event)'));
   }
   assert.doesNotMatch(readFileSync('src/app/god-mode/GodModeClient.tsx', 'utf8'), /does not suppress|display-only|Display-only/);
+});
+
+
+test('amount display and CSV share fixed-scale formatting without inventing currency', () => {
+  for (const [amount, expected] of [[100, '100.00'], ['1200.50', '1200.50'], ['9999999999.99', '9999999999.99'], ['0.01', '0.01']] as const) {
+    assert.equal(formatExceptionAmount(amount), expected);
+    assert.ok(exceptionsToCsv(findComplianceExceptions([{ ...wire, amount }], [])).includes(`"${expected}"`));
+  }
+});
+
+test('exceptions UI uses the CSV amount formatter and mobile header stays in normal flow', async () => {
+  const { readFileSync } = await import('node:fs');
+  const page = readFileSync('src/app/auditor-dashboard/page.tsx', 'utf8');
+  assert.ok(page.includes('{formatExceptionAmount(wire.amount)}'));
+  assert.doesNotMatch(page, /wire.currency/);
+  const sidebar = readFileSync('src/components/Sidebar.tsx', 'utf8');
+  const header = sidebar.match(/className="(md:hidden flex items-center justify-between[^"\n]+)"/);
+  assert.ok(header);
+  assert.match(header[1], /relative/);
+  assert.match(header[1], /shrink-0/);
+  assert.doesNotMatch(header[1], /sticky|fixed/);
+  assert.match(sidebar, /hidden md:flex[^"\n]*sticky top-0/);
 });

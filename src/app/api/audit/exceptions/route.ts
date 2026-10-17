@@ -13,8 +13,9 @@ export const GET = withAuth([ROLES.AUDITOR, ROLES.CFO], async (_req, _ctx, auth)
     // Page both datasets so the default database row cap cannot hide exceptions.
     const pageSize = 500;
     for (let offset = 0; ; offset += pageSize) {
+      // Wires do not snapshot currency; vendors.currency is mutable, not historical evidence.
       let query = auth.supabase.from('wire_requests')
-        .select('id, vendor_id, vendor_name_snapshot, amount, currency, created_at, risk_score, status')
+        .select('id, vendor_id, vendor_name_snapshot, amount, created_at, risk_score, status')
         .eq('company_id', auth.companyId)
         .lte('created_at', cutoff);
       // Preserve the existing CFO quarantine boundary.

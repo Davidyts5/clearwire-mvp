@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Download, Loader2, ShieldCheck } from 'lucide-react';
-import { exceptionsToCsv, type ComplianceException } from '@/lib/compliance-exceptions';
+import { formatExceptionAmount, exceptionsToCsv, type ComplianceException } from '@/lib/compliance-exceptions';
 
 export default function AuditorDashboard() {
   const [exceptions, setExceptions] = useState<ComplianceException[]>([]);
@@ -71,7 +71,7 @@ export default function AuditorDashboard() {
                 <tr key={wire.id} className="align-top hover:bg-slate-50/60">
                   <td className="px-5 py-4"><Link className="font-mono text-xs text-blue-700 underline decoration-blue-200 underline-offset-4" href={`/auditor-dashboard/ledger?wireId=${encodeURIComponent(wire.id)}`}>{wire.id}</Link></td>
                   <td className="px-5 py-4 font-medium text-slate-900">{wire.vendor_name_snapshot || 'Unknown vendor'}</td>
-                  <td className="whitespace-nowrap px-5 py-4 tabular-nums text-slate-700">{Number(wire.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {wire.currency}</td>
+                  <td className="whitespace-nowrap px-5 py-4 tabular-nums text-slate-700">{formatExceptionAmount(wire.amount)}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500"><time dateTime={wire.created_at} title={new Date(wire.created_at).toLocaleString()}>{new Date(wire.created_at).toLocaleDateString()}</time></td>
                   <td className="min-w-[280px] space-y-2 px-5 py-4">{wire.reasons.map(reason => <span key={reason} className="block w-fit rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">{reason}</span>)}</td>
                 </tr>
@@ -80,7 +80,7 @@ export default function AuditorDashboard() {
           </div>
         )}
       </section>
-      <p className="text-xs text-slate-500">Review signals, not fraud findings. High risk means a score of 70 or above. Vendor changes are matched by approval time before wire creation, regardless of wire status.</p>
+      <p className="text-xs text-slate-500">Amounts are shown without currency because wire requests do not record it. Review signals, not fraud findings. High risk means a score of 70 or above. Vendor changes are matched by approval time before wire creation, regardless of wire status.</p>
     </div>
   );
 }
